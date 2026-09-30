@@ -34,7 +34,7 @@ Key invariants (enforced in services, not the schema):
 - **Shipment START = physical issue.** `restricted_qty -= x` + `GOODS_ISSUE` movement. Transactional and idempotent (status guard + row lock).
 - **Issued-but-unaccepted stock stays in transit.** GOODS_ISSUE is immutable and POD restores nothing to the source automatically; unaccepted quantity remains in the delivery operation's possession until reallocated or explicitly returned (proposal: docs/TRANSIT_STOCK_CORRECTION.md).
 - **Invoice = snapshot** created at SO confirmation; never rewritten when master pricing changes.
-- **Credit blocking** is independent of stock availability: a customer with a not-fully-settled invoice cannot create another order.
+- **Credit blocking** is independent of stock availability: a customer with a not-fully-settled invoice cannot create another order. (Audit correction: the block is enforced at every safe post-confirmation boundary too — new Delivery allocation and Shipment START. POD / rejection / transit / return of stock that already left the source are deliberately NEVER blocked.)
 - **Inventory can belong to PRIMARY / SHIP_TO / VAN** customers only (`inventory.customer_id`).
 
 ## 2. Laravel / directory strategy
@@ -189,7 +189,10 @@ allocations, shipment start, payments/credits requires live server state.
   (derived from the employee, same rule as the SO itself), filtered by
   `employee_product` (no rows = all company products), are exposed
   via `/orders/context`; `replaceItems` re-validates company/active/unit/conversion
-  on every save — request spoofing cannot introduce foreign products.
+  **and the `employee_product` scope** on every save (empty scope = all company
+  products) — request spoofing can neither introduce foreign-company products
+  nor out-of-scope products. Confirmation re-checks the scope and raises a
+  `ConfirmationConflict` if it was narrowed after drafting (audit correction).
 - **Recommended price resolution** (`PricingService`): applicable conditions =
   active + company + product + validity window (+ optional region match).
   Precedence: exactly one region-specific condition beats generic ones; any
@@ -482,7 +485,11 @@ authoritative POD outcomes:
   remaining_amount`; `net_exposure = max(0, outstanding − available_credit)`
   (unused credit REDUCES exposure). Preserved business rule: a sold-to debtor
   with positive net exposure cannot confirm another SO (server-side
-  ConfirmationConflict). NO configurable credit-limit facility.
+  ConfirmationConflict). Audit correction — the same exposure guard also blocks
+  NEW Delivery allocation and Shipment START (server-side 422), so a debtor
+  cannot keep drawing stock after defaulting; the guard is intentionally absent
+  from POD, SO-item rejection, transit and return so already-dispatched stock
+  stays accountable. NO configurable credit-limit facility.
 
 ## 12. Requirement risks & decisions
 

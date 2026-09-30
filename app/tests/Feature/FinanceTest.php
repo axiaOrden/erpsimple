@@ -588,10 +588,19 @@ class FinanceTest extends TestCase
         $order1 = $this->confirmedOrder('10', 'PCS', '10000.00');
         $order2 = $this->confirmedOrder('5', 'PCS', '10000.00');
 
-        $this->createInvoicedOrder('10', 'PCS', '10000.00', order: $order1);
+        // Both deliveries leave the source BEFORE either POD raises a debt.
+        // The strict credit rule blocks new allocation once an invoice is
+        // outstanding, so a debtor legitimately holding two invoices dispatches
+        // both deliveries first (audit scenarios 28/29).
+        $d1 = $this->allocateDelivery($order1, '10', 'PCS');
+        $this->ship($d1);
+        $d2 = $this->allocateDelivery($order2, '5', 'PCS');
+        $this->ship($d2);
+
+        $this->confirmPod($d1, '10', 'PCS');
         $oldInvoice = Invoice::firstOrFail();
 
-        $this->createInvoicedOrder('5', 'PCS', '10000.00', order: $order2, assertSingle: false);
+        $this->confirmPod($d2, '5', 'PCS');
         $newInvoice = Invoice::orderByDesc('invoice_no')->firstOrFail();
         $this->assertNotSame($oldInvoice->invoice_no, $newInvoice->invoice_no);
 

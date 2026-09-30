@@ -37,6 +37,7 @@ class ShipmentService
 {
     public function __construct(
         private readonly TransitService $transit,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /** Company-prefixed shipment number: SHP-EMANL-2026-00001. */
@@ -212,6 +213,14 @@ class ShipmentService
                 if ($delivery->company_id !== $locked->company_id || $delivery->source_customer_id !== $sourceId) {
                     abort(422, $delivery->delivery_no.' does not match the shipment company/source.');
                 }
+
+                // Strict credit rule (audit correction): START is the last safe
+                // boundary before physical dispatch — a debtor with outstanding
+                // net exposure must not receive additional exposure here either.
+                // POD/rejection/transit of ALREADY dispatched stock stay open.
+                $this->invoices->assertDebtorWithinExposure(
+                    $delivery->customer_id, $delivery->company_id, 'Shipment start for '.$delivery->delivery_no,
+                );
             }
 
             // 5. Collect items with per-item basic quantities AND their

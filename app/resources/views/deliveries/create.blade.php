@@ -32,9 +32,12 @@
         <div class="m-card divide-y divide-outline-variant">
             @foreach ($lines as $line)
                 @php
-                    $maxBasic = min((float) $line['remaining_basic'], (float) $line['unrestricted_qty']);
-                    // FREE deal lines are physical stock like any other line:
-                    // their own product, own quantity, own allocation.
+                    $transitBalance = (float) ($transitBalances[$line['product_id']] ?? 0);
+                    // A line is allocatable while demand is open AND there is
+                    // either source stock OR legitimate reusable custody stock
+                    // to back it (Phase 9 field redeployment). FREE deal lines
+                    // are physical stock like any other line.
+                    $maxBasic = min((float) $line['remaining_basic'], (float) $line['unrestricted_qty'] + $transitBalance);
                     $allocatable = $line['rejection_status'] === 'NONE' && $maxBasic > 0;
                 @endphp
                 <div class="p-4 space-y-2">
@@ -59,9 +62,6 @@
                     </div>
 
                     @if ($allocatable)
-                        @php
-                            $transitBalance = (float) ($transitBalances[$line['product_id']] ?? 0);
-                        @endphp
                         <div class="flex gap-2 items-center">
                             <input type="number" name="lines[{{ $loop->index }}][sales_order_item_no]" value="{{ $line['item_no'] }}" hidden>
                             <input type="number" name="lines[{{ $loop->index }}][qty]" step="0.001" min="0"

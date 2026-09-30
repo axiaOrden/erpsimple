@@ -11,6 +11,7 @@ use App\Exceptions\ConfirmationConflict;
 use App\Models\CustomerEmployee;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
+use App\Models\EmployeeProduct;
 use App\Models\ProductMaster;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderItem;
@@ -163,6 +164,22 @@ class SalesOrderService
 
                 if ($order->order_status !== OrderStatus::DRAFT) {
                     abort(422, 'Order was already confirmed.');
+                }
+
+                // Product scope re-validation (employee_product; empty = all
+                // company products): a scope removed after drafting becomes a
+                // confirmation conflict, exactly like a revoked assignment.
+                $scopedProducts = EmployeeProduct::where('employee_id', $order->sales_employee_id)->pluck('product_id');
+
+                if ($scopedProducts->isNotEmpty()) {
+                    $outOfScope = $order->items()->pluck('product_id')->diff($scopedProducts);
+
+                    if ($outOfScope->isNotEmpty()) {
+                        $conflicts[] = 'Product(s) '.$outOfScope->implode(', ')
+                            .' are outside the sales employee\'s product scope. Restore the product scope or re-draft.';
+
+                        throw new ConfirmationConflict($conflicts);
+                    }
                 }
 
                 $soldTo = CustomerMaster::findOrFail($order->sold_to_customer_id);
@@ -429,9 +446,18 @@ class SalesOrderService
     {
         SalesOrderItem::where('sales_order_no', $order->sales_order_no)->delete();
 
+        // Server-side product scope (employee_product; empty = all company
+        // products). The capture UI filters products, but a spoofed/offline
+        // payload must be rejected too — never trust the client.
+        $scopedProducts = EmployeeProduct::where('employee_id', $order->sales_employee_id)->pluck('product_id');
+
         $itemNo = 1;
 
         foreach ($lines as $line) {
+            if ($scopedProducts->isNotEmpty() && ! $scopedProducts->contains($line['product_id'])) {
+                abort(403, "Product '{$line['product_id']}' is outside your product scope.");
+            }
+
             $product = ProductMaster::where('product_id', $line['product_id'])->first();
 
             if ($product === null || $product->company_id !== $companyId) {

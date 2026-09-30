@@ -421,6 +421,34 @@ class InvoiceService
     }
 
     /**
+     * Post-confirmation exposure guard (audit correction, business rule 28):
+     * a debtor with positive net exposure must not receive additional
+     * commercial exposure at the SAFE boundaries that follow confirmation —
+     * delivery allocation and Shipment START. Uses the same three-value
+     * exposure math as SO confirmation, so credit/outstanding are never
+     * double-counted.
+     *
+     * POD / rejection / transit / return are deliberately NOT guarded: stock
+     * that already left the source must remain fully accountable.
+     */
+    public function assertDebtorWithinExposure(string $customerId, ?string $companyId, string $action, string $currency = 'NGN'): void
+    {
+        $exposure = $this->exposure($customerId, $companyId);
+
+        if (Decimal::compare($exposure['net_exposure'], '0', 2) > 0) {
+            abort(422, sprintf(
+                'Credit exposure: %s has a net exposure of %s %s (invoice outstanding %s, available credit %s). %s is blocked until the debt is settled or customer credit is applied.',
+                $customerId,
+                $exposure['net_exposure'],
+                $currency,
+                $exposure['outstanding'],
+                $exposure['available_credit'],
+                $action,
+            ));
+        }
+    }
+
+    /**
      * SO-confirmation blocking (RULED §21.7): a sold-to debtor with positive
      * net exposure cannot confirm another SO. Throws ConfirmationConflict.
      */

@@ -225,14 +225,15 @@ class DeliveryController extends Controller
             abort_if($order->sales_employee_id !== $user->employee_id, 403, 'This order belongs to another employee.');
             abort_if($user->employee === null, 403, 'Your login is not linked to an employee record.');
 
-            // Product scope: employees allocate only products within their scope.
+            // Product scope: employees allocate only products within their
+            // scope. ANY out-of-scope line blocks the whole order (the old
+            // condition let a mixed in/out-of-scope order through).
             $scoped = EmployeeProduct::where('employee_id', $user->employee_id)->pluck('product_id');
 
             if ($scoped->isNotEmpty()) {
-                $foreign = $order->items()->whereIn('product_id', $scoped)->exists() === false
-                    && $order->items()->pluck('product_id')->diff($scoped)->isNotEmpty();
+                $outOfScope = $order->items()->pluck('product_id')->diff($scoped);
 
-                abort_if($foreign, 403, 'This order contains products outside your product scope.');
+                abort_if($outOfScope->isNotEmpty(), 403, 'This order contains products outside your product scope.');
             }
 
             return;

@@ -43,6 +43,7 @@ class DeliveryService
     public function __construct(
         private readonly ProductUnitService $units,
         private readonly TransitService $transit,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /** Company-prefixed delivery number: DEL-EMANL-2026-00001. */
@@ -184,6 +185,13 @@ class DeliveryService
             // every allocation serializes on the SO row, so concurrent stock,
             // transit or mixed allocations can never exceed remaining demand.
             SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->first();
+
+            // Strict credit rule (audit correction): a debtor with outstanding
+            // net exposure must not receive a NEW allocation. Allocation is a
+            // safe boundary — no physical stock has moved yet.
+            $this->invoices->assertDebtorWithinExposure(
+                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
+            );
 
             $delivery = Delivery::create([
                 'delivery_no' => $this->nextNumber($order->company_id),
@@ -351,6 +359,12 @@ class DeliveryService
         DB::transaction(function () use ($delivery, $order, $stockHolder, $prepared, $employee) {
             // Demand anchor for mixed stock+transit allocation (Phase 9).
             SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->first();
+
+            // Strict credit rule (audit correction): same boundary as
+            // createAndAllocate — re-allocation is a new allocation.
+            $this->invoices->assertDebtorWithinExposure(
+                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
+            );
 
             $locked = Delivery::whereKey($delivery->delivery_no)->lockForUpdate()->first();
 
