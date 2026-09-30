@@ -138,6 +138,14 @@
             <div class="m-card p-4 text-xs text-on-surface-variant">
                 Goods issued. POD confirmation and shipment COMPLETED belong to the delivery-confirmation workflow.
             </div>
+            <div class="grid gap-2">
+                @foreach ($shipment->deliveries->filter(fn ($delivery) => in_array($delivery->delivery_status->value, ['SHIPPED', 'PARTIALLY_CONFIRMED'], true)) as $delivery)
+                    <a href="{{ route('pod.show', $delivery) }}"
+                       class="h-12 inline-flex items-center justify-center rounded-full bg-primary text-on-primary font-semibold">
+                        Record POD · {{ $delivery->delivery_no }}
+                    </a>
+                @endforeach
+            </div>
         @endif
 
         <a href="{{ route('shipments.index') }}"

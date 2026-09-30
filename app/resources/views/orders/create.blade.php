@@ -10,7 +10,7 @@
     </x-slot>
 
     <form id="order-form" method="POST" action="{{ route('orders.store') }}"
-          x-data="orderCapture()"
+          x-data="orderCapture({ soldTo: @js(old('sold_to_customer_id', $selectedCustomerId)) })"
           class="space-y-4 max-w-2xl">
         @csrf
 

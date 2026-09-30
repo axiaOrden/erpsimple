@@ -61,6 +61,11 @@
                     Release allocation
                 </button>
             </form>
+
+            <a href="{{ route('shipments.create', ['source' => $delivery->source_customer_id]) }}"
+               class="w-full h-12 inline-flex items-center justify-center rounded-full bg-primary text-on-primary font-semibold shadow-m1">
+                Add to shipment
+            </a>
         @elseif ($delivery->delivery_status->value === 'SHIPPED')
             <a href="{{ route('pod.show', $delivery) }}"
                class="w-full h-12 inline-flex items-center justify-center rounded-full bg-primary text-on-primary font-semibold">

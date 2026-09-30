@@ -7,6 +7,7 @@ use App\Enums\MovementType;
 use App\Models\AppUser;
 use App\Models\CustomerEmployee;
 use App\Models\CustomerMaster;
+use App\Models\EmployeeProduct;
 use App\Models\Inventory;
 use App\Models\ProductMaster;
 use App\Models\StockCount;
@@ -91,9 +92,17 @@ class InventoryController extends Controller
         abort_if($employee === null, 403, 'Your login is not linked to an employee record.');
 
         return view('inventory.count-create', [
-            'customers' => $this->visibleStockHolders($user)->values(),
+            'customers' => $this->visibleCountCustomers($user)->values(),
             'products' => ProductMaster::query()
                 ->when(! $user->isSuperadmin(), fn ($q) => $q->where('company_id', $user->company_id))
+                ->when($user->isSalesEmployee(), function ($query) use ($employee) {
+                    $scopedProductIds = EmployeeProduct::where('employee_id', $employee->employee_id)->pluck('product_id');
+
+                    if ($scopedProductIds->isNotEmpty()) {
+                        $query->whereIn('product_id', $scopedProductIds);
+                    }
+                })
+                ->where('active', true)
                 ->orderBy('product_description')->get(),
             'countTypes' => [
                 CountType::PRIMARY_OPERATIONAL->value => 'Primary operational (authoritative)',
@@ -220,6 +229,22 @@ class InventoryController extends Controller
         }
 
         return $holders->get();
+    }
+
+    /** Customers an employee may physically count, including observational Secondaries. */
+    private function visibleCountCustomers($user): Collection
+    {
+        $customers = CustomerMaster::query()
+            ->whereIn('customer_type', ['PRIMARY', 'SECONDARY', 'SHIP_TO', 'VAN'])
+            ->where('active', true)
+            ->orderBy('business_name');
+
+        if ($user->isSalesEmployee()) {
+            $assigned = CustomerEmployee::where('employee_id', $user->employee_id)->pluck('customer_id');
+            $customers->whereIn('customer_id', $assigned);
+        }
+
+        return $customers->get();
     }
 
     private function authorizeAdjust(AppUser $user): void

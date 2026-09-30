@@ -73,6 +73,7 @@ class SalesOrderController extends Controller
             // (no fixed Primary → Secondary mapping; server-enforced everywhere).
             'primaries' => CustomerMaster::whereIn('customer_id', $this->orders->eligibleSupplyingIds($employee))
                 ->orderBy('business_name')->get(),
+            'selectedCustomerId' => $request->string('customer')->toString(),
         ]);
     }
 

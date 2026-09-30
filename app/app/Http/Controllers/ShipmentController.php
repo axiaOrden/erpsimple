@@ -52,6 +52,7 @@ class ShipmentController extends Controller
     {
         return view('shipments.create', [
             'sources' => $this->operableSources($request->user()),
+            'selectedSourceId' => $request->string('source')->toString(),
         ]);
     }
 

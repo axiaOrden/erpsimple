@@ -6,8 +6,13 @@ use App\Models\CustomerEmployee;
 use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
 use App\Models\CustomerVisitAttendance;
+use App\Models\Delivery;
+use App\Models\SalesOrder;
+use App\Models\StockCount;
 use App\Services\AttendanceService;
 use App\Services\FjpRotationService;
+use App\Services\InvoiceService;
+use App\Services\SalesOrderService;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -23,6 +28,8 @@ class VisitController extends Controller
         private readonly AttendanceService $attendance,
         private readonly SyncService $sync,
         private readonly FjpRotationService $rotation,
+        private readonly SalesOrderService $orders,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /**
@@ -115,6 +122,28 @@ class VisitController extends Controller
             'inventory' => in_array($customer->customer_type->value, ['PRIMARY', 'SHIP_TO', 'VAN'], true)
                 ? $customer->inventory()->with('product')->orderBy('product_id')->get()
                 : collect(),
+            'recentPurchases' => $this->orders->recentPurchaseHistory($employee, $customer->customer_id),
+            'recentCounts' => StockCount::with('items')
+                ->where('employee_id', $employee->employee_id)
+                ->where('customer_id', $customer->customer_id)
+                ->latest()
+                ->limit(3)
+                ->get(),
+            'openOrders' => SalesOrder::with('items')
+                ->where('sales_employee_id', $employee->employee_id)
+                ->where('sold_to_customer_id', $customer->customer_id)
+                ->whereNotIn('order_status', ['COMPLETED', 'COMPLETELY_REJECTED'])
+                ->latest()
+                ->limit(5)
+                ->get(),
+            'activeDeliveries' => Delivery::with('items')
+                ->where('company_id', $employee->company_id)
+                ->where('customer_id', $customer->customer_id)
+                ->whereIn('delivery_status', ['ALLOCATED', 'SHIPPED', 'PARTIALLY_CONFIRMED'])
+                ->latest()
+                ->limit(5)
+                ->get(),
+            'exposure' => $this->invoices->exposure($customer->customer_id, $employee->company_id),
         ]);
     }
 

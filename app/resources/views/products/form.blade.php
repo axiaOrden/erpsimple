@@ -53,7 +53,7 @@
                 </div>
             </div>
 
-            <div class="grid sm:grid-cols-2 gap-4">
+            <div class="grid sm:grid-cols-3 gap-4">
                 <div>
                     <x-input-label for="product_category" value="Category (optional)" />
                     <x-text-input id="product_category" name="product_category" type="text" class="mt-1 block w-full"
@@ -63,6 +63,12 @@
                     <x-input-label for="issuing_company" value="Issuing company (optional)" />
                     <x-text-input id="issuing_company" name="issuing_company" type="text" class="mt-1 block w-full"
                                   value="{{ old('issuing_company', $product->issuing_company) }}" maxlength="255" />
+                </div>
+                <div>
+                    <x-input-label for="ext_product_id" value="External product ID (optional)" />
+                    <x-text-input id="ext_product_id" name="ext_product_id" type="text" class="mt-1 block w-full"
+                                  value="{{ old('ext_product_id', $product->ext_product_id) }}" maxlength="100" />
+                    <x-input-error :messages="$errors->get('ext_product_id')" class="mt-2" />
                 </div>
             </div>
 

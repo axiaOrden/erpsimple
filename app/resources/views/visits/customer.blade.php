@@ -70,6 +70,48 @@
             <p x-show="lastResult" x-text="lastResult" class="text-xs text-primary mt-2"></p>
         </div>
 
+        @php
+            $countType = match ($customer->customer_type->value) {
+                'PRIMARY' => 'PRIMARY_OPERATIONAL',
+                'VAN' => 'VAN_CLOSING',
+                default => 'SECONDARY_OBSERVATION',
+            };
+        @endphp
+
+        <div class="grid grid-cols-2 gap-2">
+            <a href="{{ route('inventory.counts.create', ['customer' => $customer->customer_id, 'type' => $countType]) }}"
+               class="h-12 inline-flex items-center justify-center rounded-full bg-primary text-on-primary font-semibold">
+                Count inventory
+            </a>
+            @if ($customer->customer_type->value === 'SECONDARY')
+                <a href="{{ route('orders.create', ['customer' => $customer->customer_id]) }}"
+                   class="h-12 inline-flex items-center justify-center rounded-full bg-secondary-container text-on-secondary-container font-semibold">
+                    New order
+                </a>
+            @else
+                <a href="{{ route('shipments.create', ['source' => $customer->customer_id]) }}"
+                   class="h-12 inline-flex items-center justify-center rounded-full bg-secondary-container text-on-secondary-container font-semibold">
+                    Plan shipment
+                </a>
+            @endif
+            <a href="{{ route('finance.statement', $customer) }}"
+               class="col-span-2 h-11 inline-flex items-center justify-center rounded-full bg-surface-variant text-on-surface-variant font-medium">
+                Statement & outstanding
+            </a>
+        </div>
+
+        @if ((float) $exposure['net_exposure'] > 0)
+            <div class="rounded-m bg-error-container p-4 text-sm text-on-error-container">
+                <p class="font-semibold">New exposure is blocked</p>
+                <p class="mt-1">
+                    Outstanding {{ number_format((float) $exposure['outstanding'], 2) }} NGN,
+                    available credit {{ number_format((float) $exposure['available_credit'], 2) }} NGN,
+                    net exposure {{ number_format((float) $exposure['net_exposure'], 2) }} NGN.
+                    Existing dispatched goods remain available for POD and accountability. Ask a finance administrator to record settlement.
+                </p>
+            </div>
+        @endif
+
         @if ($inventory->isNotEmpty())
             <div class="m-card p-4">
                 <h2 class="text-base font-semibold mb-2">Stock here (latest count basis)</h2>
@@ -83,7 +125,65 @@
                         </div>
                     @endforeach
                 </div>
-                <p class="text-xs text-on-surface-variant mt-2">Full stock counts arrive in Phase 5.</p>
+                <p class="text-xs text-on-surface-variant mt-2">The latest submitted Primary count is the authoritative baseline.</p>
+            </div>
+        @endif
+
+        <div class="m-card p-4">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-base font-semibold">Recent counts</h2>
+                <a href="{{ route('inventory.counts.index') }}" class="text-sm text-primary font-medium">All counts</a>
+            </div>
+            @forelse ($recentCounts as $count)
+                <a href="{{ route('inventory.counts.show', $count) }}" class="mt-2 flex items-center justify-between gap-3 text-sm">
+                    <span>{{ $count->count_no }} · {{ $count->items->count() }} line(s)</span>
+                    <span class="m-chip">{{ $count->count_status->value }}</span>
+                </a>
+            @empty
+                <p class="mt-2 text-sm text-on-surface-variant">No count recorded for this customer yet.</p>
+            @endforelse
+        </div>
+
+        @if ($customer->customer_type->value === 'SECONDARY')
+            <div class="m-card p-4">
+                <h2 class="text-base font-semibold">Recent purchases</h2>
+                <p class="text-xs text-on-surface-variant">Guidance only—nothing is added to a new order automatically.</p>
+                @forelse ($recentPurchases as $purchase)
+                    <div class="mt-2 flex items-center justify-between gap-3 text-sm">
+                        <span class="min-w-0 truncate">{{ $purchase['product'] }} · {{ $purchase['date'] }}</span>
+                        <span class="shrink-0 tabular-nums">{{ $purchase['quantity'] }} {{ $purchase['unit'] }}</span>
+                    </div>
+                @empty
+                    <p class="mt-2 text-sm text-on-surface-variant">No confirmed purchase history yet.</p>
+                @endforelse
+            </div>
+        @endif
+
+        <div class="m-card p-4">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-base font-semibold">Open orders</h2>
+                <a href="{{ route('orders.index') }}" class="text-sm text-primary font-medium">All orders</a>
+            </div>
+            @forelse ($openOrders as $order)
+                <a href="{{ route('orders.show', $order) }}" class="mt-2 flex items-center justify-between gap-3 text-sm">
+                    <span>{{ $order->sales_order_no }} · {{ $order->items->count() }} line(s)</span>
+                    <span class="m-chip">{{ $order->order_status->value }}</span>
+                </a>
+            @empty
+                <p class="mt-2 text-sm text-on-surface-variant">No open orders for this customer.</p>
+            @endforelse
+        </div>
+
+        @if ($activeDeliveries->isNotEmpty())
+            <div class="m-card p-4">
+                <h2 class="text-base font-semibold">Active deliveries</h2>
+                @foreach ($activeDeliveries as $delivery)
+                    <a href="{{ $delivery->delivery_status->value === 'SHIPPED' ? route('pod.show', $delivery) : route('deliveries.show', $delivery) }}"
+                       class="mt-2 flex items-center justify-between gap-3 text-sm">
+                        <span>{{ $delivery->delivery_no }} · {{ $delivery->items->count() }} line(s)</span>
+                        <span class="m-chip">{{ $delivery->delivery_status->value }}</span>
+                    </a>
+                @endforeach
             </div>
         @endif
 

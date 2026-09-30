@@ -28,7 +28,7 @@
                             class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
                         <option value="">Choose customer…</option>
                         @foreach ($customers as $c)
-                            <option value="{{ $c->customer_id }}">{{ $c->business_name }} ({{ $c->customer_type->value }})</option>
+                            <option value="{{ $c->customer_id }}" @selected(old('customer_id', request('customer')) === $c->customer_id)>{{ $c->business_name }} ({{ $c->customer_type->value }})</option>
                         @endforeach
                     </select>
                 </div>
@@ -37,7 +37,7 @@
                     <select id="count_type" name="count_type" required
                             class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
                         @foreach ($countTypes as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
+                            <option value="{{ $value }}" @selected(old('count_type', request('type')) === $value)>{{ $label }}</option>
                         @endforeach
                     </select>
                 </div>

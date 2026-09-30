@@ -13,14 +13,14 @@
             <span class="font-semibold">Check In</span>
             <span class="text-xs text-on-surface-variant">Record a visit</span>
         </a>
-        <a href="#" class="m-card p-4 flex flex-col items-start gap-2 active:scale-[.98] transition-transform">
+        <a href="{{ route('orders.create') }}" class="m-card p-4 flex flex-col items-start gap-2 active:scale-[.98] transition-transform">
             <span class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container grid place-items-center">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             </span>
             <span class="font-semibold">Create Order</span>
             <span class="text-xs text-on-surface-variant">New sales order</span>
         </a>
-        <a href="#" class="m-card p-4 flex flex-col items-start gap-2 active:scale-[.98] transition-transform">
+        <a href="{{ route('inventory.counts.create') }}" class="m-card p-4 flex flex-col items-start gap-2 active:scale-[.98] transition-transform">
             <span class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container grid place-items-center">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
             </span>
@@ -51,7 +51,7 @@
         @else
             <div class="space-y-3">
                 @foreach ($todayVisits as $visit)
-                    <div class="m-card p-4 flex items-center gap-3">
+                    <a href="{{ route('visits.customer', $visit->customer->customer_id) }}" class="m-card p-4 flex items-center gap-3">
                         <span class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container grid place-items-center font-semibold">
                             {{ strtoupper(substr($visit->customer->business_name, 0, 2)) }}
                         </span>
@@ -63,7 +63,7 @@
                             </p>
                         </div>
                         <span class="m-chip">{{ $visit->preferred_week ? 'RW'.$visit->preferred_week : 'Weekly' }}</span>
-                    </div>
+                    </a>
                 @endforeach
             </div>
         @endif

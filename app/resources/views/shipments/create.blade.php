@@ -25,7 +25,7 @@
             <select name="source_customer_id" required class="w-full rounded-m border-outline-variant bg-surface text-sm">
                 <option value="">Choose source…</option>
                 @foreach ($sources as $source)
-                    <option value="{{ $source->customer_id }}">
+                    <option value="{{ $source->customer_id }}" @selected(old('source_customer_id', $selectedSourceId) === $source->customer_id)>
                         {{ $source->business_name }} ({{ $source->customer_type }})
                     </option>
                 @endforeach

@@ -94,6 +94,7 @@ class DatabaseSeeder extends Seeder
         $this->seedDemoFieldData();
         $this->seedDemoFjp();
         $this->seedDemoProducts();
+        $this->call(EmanlProductSeeder::class);
     }
 
     /** Demo products for each company so the product list has content. */
