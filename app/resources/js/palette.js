@@ -1,0 +1,22 @@
+/** Shared design tokens (single source of truth for icons + CSS). */
+export const primary = '#0b57d0';
+export const onPrimary = '#ffffff';
+export const primaryContainer = '#d3e3fd';
+export const onPrimaryContainer = '#041e49';
+export const secondary = '#575e71';
+export const secondaryContainer = '#dbe2f9';
+export const onSecondaryContainer = '#141b2c';
+export const tertiaryContainer = '#cdebff';
+export const onTertiaryContainer = '#001f2e';
+export const error = '#b3261e';
+export const errorContainer = '#f9dedc';
+export const onErrorContainer = '#410e0b';
+export const surface = '#f9f9ff';
+export const surfaceDim = '#d9d9e0';
+export const surfaceVariant = '#e0e2ec';
+export const surfaceContainer = '#f0f3fa';
+export const surfaceContainerHigh = '#eaeef6';
+export const onSurface = '#191c20';
+export const onSurfaceVariant = '#44474e';
+export const outline = '#74777f';
+export const outlineVariant = '#c4c6d0';

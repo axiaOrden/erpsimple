@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+        @apply bg-surface text-on-surface antialiased;
+    }
+
+    button,
+    a {
+        touch-action: manipulation;
+    }
+
+    /* 44px minimum touch targets (not for checkbox/radio controls) */
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="date"],
+    select,
+    textarea,
+    button,
+    a {
+        min-height: 44px;
+    }
+
+    h1 {
+        @apply text-2xl font-semibold tracking-tight;
+    }
+
+    h2 {
+        @apply text-xl font-semibold tracking-tight;
+    }
+
+    h3 {
+        @apply text-lg font-medium;
+    }
+}
+
+@layer components {
+    /* Material filled card: rounded, elevated surface */
+    .m-card {
+        @apply bg-surface-container rounded-m shadow-m1;
+    }
+
+    /* Outlined card variant */
+    .m-card-outlined {
+        @apply bg-surface border border-outline-variant rounded-m;
+    }
+
+    .m-chip {
+        @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-surface-variant text-on-surface-variant;
+    }
+
+    .m-chip-active {
+        @apply bg-primary-container text-on-primary-container;
+    }
+
+    .m-chip-error {
+        @apply bg-error-container text-on-error-container;
+    }
+
+    .m-fab {
+        @apply fixed bottom-24 right-4 md:hidden inline-flex items-center justify-center w-14 h-14 rounded-ml bg-primary-container text-on-primary-container shadow-m2 active:scale-95 transition-transform;
+    }
+
+    .m-list-item {
+        @apply flex items-center gap-3 px-4 py-3 min-h-[56px] active:bg-surface-container-high transition-colors;
+    }
+}
