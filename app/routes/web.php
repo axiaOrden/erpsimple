@@ -7,9 +7,9 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\FjpController;
 use App\Http\Controllers\InventoryController;
-use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\PodController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
@@ -98,6 +98,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/orders', [SalesOrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/create', [SalesOrderController::class, 'create'])->name('orders.create');
     Route::match(['get', 'post'], '/orders/context', [SalesOrderController::class, 'context'])->name('orders.context');
+    Route::get('/orders/customer-history', [SalesOrderController::class, 'customerHistory'])->name('orders.customer-history');
     Route::post('/orders', [SalesOrderController::class, 'store'])->name('orders.store');
     Route::get('/orders/{order}/edit', [SalesOrderController::class, 'edit'])->name('orders.edit');
     Route::patch('/orders/{order}', [SalesOrderController::class, 'update'])->name('orders.update');

@@ -19,9 +19,17 @@ export function orderCaptureComponent(existing = null) {
         dealsAmbiguous: false,
         sourcesCache: {},
 
+        // Read-only purchase guidance for the selected customer. Never used to
+        // create lines or constrain quantities.
+        history: [],
+
         lines: existing?.lines ?? [],
 
         async init() {
+            if (this.soldTo) {
+                await this.loadHistory();
+            }
+
             if (this.supplying && this.soldTo) {
                 await this.loadProducts();
             }
@@ -48,6 +56,43 @@ export function orderCaptureComponent(existing = null) {
         async onCustomerChange() {
             // Supplying choice is independent of the sold-to customer; nothing
             // to filter — the employee may use any Primary they can supply from.
+            // The customer's recent purchases are guidance only.
+            await this.loadHistory();
+        },
+
+        fmtQty(qty) {
+            const n = Number(qty);
+
+            if (!Number.isFinite(n)) return String(qty ?? '');
+
+            return (Math.round(n * 1000) / 1000).toString();
+        },
+
+        async loadHistory() {
+            if (!this.soldTo) {
+                this.history = [];
+
+                return;
+            }
+
+            const params = new URLSearchParams({ sold_to_customer_id: this.soldTo });
+
+            try {
+                const response = await fetch('/orders/customer-history?' + params.toString(), {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!response.ok) {
+                    this.history = [];
+
+                    return;
+                }
+
+                const data = await response.json();
+                this.history = data.history ?? [];
+            } catch (_) {
+                this.history = [];
+            }
         },
 
         async onSupplyingChange() {

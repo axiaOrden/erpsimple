@@ -186,13 +186,6 @@ class DeliveryService
             // transit or mixed allocations can never exceed remaining demand.
             SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->first();
 
-            // Strict credit rule (audit correction): a debtor with outstanding
-            // net exposure must not receive a NEW allocation. Allocation is a
-            // safe boundary — no physical stock has moved yet.
-            $this->invoices->assertDebtorWithinExposure(
-                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
-            );
-
             $delivery = Delivery::create([
                 'delivery_no' => $this->nextNumber($order->company_id),
                 'company_id' => $order->company_id,
@@ -207,12 +200,24 @@ class DeliveryService
                 $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee);
             }
 
+            // Strict credit rule (audit correction): a debtor with outstanding
+            // net exposure must not receive a NEW allocation. This check — and
+            // the debtor-row lock it takes — runs AFTER every inventory/transit
+            // lock of this transaction (the debtor row is the LAST lock, a
+            // sink), so it serializes against concurrent invoice creation
+            // without introducing a deadlock-prone lock order. A doomed
+            // allocation rolls back whole, so the late position changes no
+            // observable state.
+            $this->invoices->assertDebtorWithinExposure(
+                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
+            );
+
             $delivery->delivery_status = DeliveryStatus::ALLOCATED;
             $delivery->allocated_at = now();
             $delivery->save();
 
             $this->refreshOrderFulfillmentStatus($order);
-        });
+        }, attempts: 2); // current-read exposure check may surface MariaDB 1020 → retry (same as START)
 
         return ['delivery' => $delivery->fresh(['items']), 'warnings' => []];
     }
@@ -360,12 +365,6 @@ class DeliveryService
             // Demand anchor for mixed stock+transit allocation (Phase 9).
             SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->first();
 
-            // Strict credit rule (audit correction): same boundary as
-            // createAndAllocate — re-allocation is a new allocation.
-            $this->invoices->assertDebtorWithinExposure(
-                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
-            );
-
             $locked = Delivery::whereKey($delivery->delivery_no)->lockForUpdate()->first();
 
             if ($locked === null || $locked->delivery_status !== DeliveryStatus::DRAFT) {
@@ -381,12 +380,18 @@ class DeliveryService
                 $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee);
             }
 
+            // Strict credit rule: same boundary as createAndAllocate — see the
+            // lock-order rationale there. Re-allocation is a new allocation.
+            $this->invoices->assertDebtorWithinExposure(
+                $order->sold_to_customer_id, $order->company_id, 'Delivery allocation', $order->currency,
+            );
+
             $delivery->delivery_status = DeliveryStatus::ALLOCATED;
             $delivery->allocated_at = now();
             $delivery->save();
 
             $this->refreshOrderFulfillmentStatus($order);
-        });
+        }, attempts: 2); // current-read exposure check may surface MariaDB 1020 → retry
 
         return ['delivery' => $delivery->fresh(['items']), 'warnings' => []];
     }

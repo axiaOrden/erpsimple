@@ -193,6 +193,12 @@ allocations, shipment start, payments/credits requires live server state.
   products) — request spoofing can neither introduce foreign-company products
   nor out-of-scope products. Confirmation re-checks the scope and raises a
   `ConfirmationConflict` if it was narrowed after drafting (audit correction).
+- **Purchase-history guidance at order capture**: `GET /orders/customer-history`
+  returns the newest ≤5 non-DRAFT order lines for the selected sold-to customer,
+  scoped to the employee's company and `employee_product` scope and limited to
+  the employee's assigned customers. GUIDANCE ONLY — rendered read-only on the
+  capture screen; it never creates lines, mandates products/quantities or
+  constrains the order.
 - **Recommended price resolution** (`PricingService`): applicable conditions =
   active + company + product + validity window (+ optional region match).
   Precedence: exactly one region-specific condition beats generic ones; any
@@ -490,6 +496,14 @@ authoritative POD outcomes:
   cannot keep drawing stock after defaulting; the guard is intentionally absent
   from POD, SO-item rejection, transit and return so already-dispatched stock
   stays accountable. NO configurable credit-limit facility.
+  **Serialization (audit hardening):** the debtor's `customer_master` row is
+  locked `FOR UPDATE` both by invoice creation and by every eligibility check
+  (SO confirm, allocation, START) — always as the transaction's **last** lock,
+  so the order stays `customer → invoices → credits → …`, acyclic. The
+  eligibility read is a CURRENT (locking) read: under REPEATABLE READ a plain
+  snapshot would miss an invoice committed while the check waited on the lock.
+  Allocation/confirm transactions retry once (`attempts: 2`) on MariaDB 1020
+  (the same remedy START already uses).
 
 ## 12. Requirement risks & decisions
 

@@ -150,6 +150,39 @@ class SalesOrderController extends Controller
         ]);
     }
 
+    /**
+     * Read-only recent-purchase guidance for one assigned customer. GUIDANCE
+     * ONLY — the client renders it; it never creates lines or constrains the
+     * order. Company-scoped and employee-product-scoped inside the service.
+     */
+    public function customerHistory(Request $request)
+    {
+        $employee = $this->employeeOf($request->user());
+
+        $validated = $request->validate([
+            'sold_to_customer_id' => ['required', 'string'],
+        ]);
+
+        $customer = CustomerMaster::find($validated['sold_to_customer_id']);
+
+        if ($customer === null) {
+            return response()->json(['error' => 'Unknown customer.'], 422);
+        }
+
+        // Only the employee's own assigned customers' history is exposed.
+        $assigned = CustomerEmployee::where('employee_id', $employee->employee_id)
+            ->where('customer_id', $customer->customer_id)
+            ->exists();
+
+        if (! $assigned) {
+            return response()->json(['error' => 'You are not assigned to this customer.'], 403);
+        }
+
+        return response()->json([
+            'history' => $this->orders->recentPurchaseHistory($employee, $customer->customer_id),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $employee = $this->employeeOf($request->user());

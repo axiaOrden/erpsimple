@@ -56,6 +56,30 @@
             </div>
         </div>
 
+        <div class="m-card p-4 space-y-2" x-show="soldTo">
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-semibold">Recent purchases</h2>
+                <span class="text-xs text-on-surface-variant">guidance only</span>
+            </div>
+            <p class="text-sm text-on-surface-variant" x-show="history.length === 0">
+                No recent purchases recorded for this customer.
+            </p>
+            <ul class="divide-y divide-outline-variant">
+                <template x-for="(h, i) in history" :key="i">
+                    <li class="py-2 flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm truncate" x-text="h.product"></p>
+                            <p class="text-xs text-on-surface-variant" x-text="h.date + ' · ' + h.sales_order_no"></p>
+                        </div>
+                        <span class="text-sm tabular-nums shrink-0" x-text="fmtQty(h.quantity) + ' ' + h.unit"></span>
+                    </li>
+                </template>
+            </ul>
+            <p class="text-xs text-on-surface-variant">
+                Past quantities never restrict or pre-fill today's order.
+            </p>
+        </div>
+
         <div class="m-card p-4 space-y-3">
             <div class="flex items-center justify-between">
                 <h2 class="text-base font-semibold">2 · Products & quantities</h2>

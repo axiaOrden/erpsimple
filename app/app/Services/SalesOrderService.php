@@ -64,6 +64,61 @@ class SalesOrderService
     }
 
     /**
+     * Recent-purchase GUIDANCE for order capture (read-only).
+     *
+     * GUIDANCE ONLY: the caller must never auto-create lines, mandate a product
+     * or constrain a quantity from this data. Scoped to
+     *   - the employee's COMPANY (customers are global — a customer's history
+     *     at another company is never exposed), and
+     *   - the employee's product scope (`employee_product`; empty = all
+     *     company products).
+     * Only non-DRAFT orders count as purchases; the newest `$limit` order
+     * lines are returned.
+     *
+     * @return Collection<int, array{sales_order_no: string, product_id: string, product: string, quantity: string, unit: string, is_free_item: bool, date: ?string}>
+     */
+    public function recentPurchaseHistory(EmployeeMaster $employee, string $customerId, int $limit = 5): Collection
+    {
+        if ($limit < 1) {
+            return collect();
+        }
+
+        $scopedProducts = EmployeeProduct::where('employee_id', $employee->employee_id)->pluck('product_id');
+
+        $orders = SalesOrder::query()
+            ->where('company_id', $employee->company_id)
+            ->where('sold_to_customer_id', $customerId)
+            ->where('order_status', '!=', OrderStatus::DRAFT->value)
+            ->with([
+                'items' => function ($query) use ($scopedProducts) {
+                    if ($scopedProducts->isNotEmpty()) {
+                        $query->whereIn('product_id', $scopedProducts);
+                    }
+
+                    $query->orderBy('item_no');
+                },
+                'items.product',
+            ])
+            ->orderByDesc('order_date')
+            ->orderByDesc('sales_order_no')
+            ->limit($limit)
+            ->get();
+
+        return $orders
+            ->flatMap(fn (SalesOrder $order) => $order->items->map(fn (SalesOrderItem $item) => [
+                'sales_order_no' => $order->sales_order_no,
+                'product_id' => $item->product_id,
+                'product' => $item->product?->product_description ?? $item->product_id,
+                'quantity' => (string) $item->order_qty,
+                'unit' => (string) $item->order_unit,
+                'is_free_item' => (bool) $item->is_free_item,
+                'date' => ($order->confirmed_at ?? $order->order_date)?->toDateString(),
+            ]))
+            ->take($limit)
+            ->values();
+    }
+
+    /**
      * Create a DRAFT order. Returns [order, warnings].
      *
      * @param  Collection<int, array{product_id: string, qty: string, unit: string, unit_price?: ?string, price_override_reason?: ?string}>  $lines
@@ -160,6 +215,8 @@ class SalesOrderService
 
         try {
             DB::transaction(function () use ($order, &$warnings, &$conflicts) {
+                $conflicts = []; // reset on a concurrency retry
+
                 $order = SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->firstOrFail();
 
                 if ($order->order_status !== OrderStatus::DRAFT) {
@@ -203,7 +260,15 @@ class SalesOrderService
                 // positive NET exposure (outstanding − available credit) may
                 // not confirm another order. Available customer credit
                 // offsets exposure; no configurable limit facility exists.
-                $exposure = $this->invoices->exposure($order->sold_to_customer_id, $companyId);
+                //
+                // Serialize with exposure CREATION: lock the debtor row the
+                // same way allocation / START / invoice generation do. It is
+                // the LAST lock this transaction takes (no other lock follows),
+                // so the lock order stays acyclic.
+                $this->invoices->lockDebtor($order->sold_to_customer_id);
+
+                // current read (locking) — see InvoiceService::exposure().
+                $exposure = $this->invoices->exposure($order->sold_to_customer_id, $companyId, true);
 
                 if (Decimal::compare($exposure['net_exposure'], '0', 2) > 0) {
                     $conflicts[] = sprintf(
@@ -310,7 +375,7 @@ class SalesOrderService
                 $order->order_status = OrderStatus::CONFIRMED;
                 $order->confirmed_at = now();
                 $order->save();
-            });
+            }, attempts: 2); // current-read exposure check may surface MariaDB 1020 → retry
         } catch (ConfirmationConflict $e) {
             // Transaction rolled back: order remains an untouched DRAFT.
             return ['order' => $order->fresh(['items']), 'warnings' => $warnings, 'conflicts' => $e->conflicts];

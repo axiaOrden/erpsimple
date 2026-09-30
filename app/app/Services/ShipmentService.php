@@ -213,14 +213,6 @@ class ShipmentService
                 if ($delivery->company_id !== $locked->company_id || $delivery->source_customer_id !== $sourceId) {
                     abort(422, $delivery->delivery_no.' does not match the shipment company/source.');
                 }
-
-                // Strict credit rule (audit correction): START is the last safe
-                // boundary before physical dispatch — a debtor with outstanding
-                // net exposure must not receive additional exposure here either.
-                // POD/rejection/transit of ALREADY dispatched stock stay open.
-                $this->invoices->assertDebtorWithinExposure(
-                    $delivery->customer_id, $delivery->company_id, 'Shipment start for '.$delivery->delivery_no,
-                );
             }
 
             // 5. Collect items with per-item basic quantities AND their
@@ -350,6 +342,21 @@ class ShipmentService
             // After this point a delivery release can no longer restore them.
             foreach ($deliveries as $delivery) {
                 $this->transit->finalizeForDelivery($delivery->delivery_no);
+            }
+
+            // 10c. Strict credit rule (audit correction): START is the last safe
+            // boundary before physical dispatch — a debtor with outstanding net
+            // exposure must not receive additional exposure here either. This
+            // runs AFTER every other lock in the transaction (shipment,
+            // deliveries, inventory, transit); the debtor customer rows are the
+            // LAST locks (sinks), taken in deterministic customer_id order so
+            // two concurrent STARTs sharing a debtor can never deadlock. A
+            // blocked START rolls back whole — nothing is dispatched, and
+            // ALREADY STARTed stock still flows through POD/transit/return.
+            foreach ($deliveries->pluck('customer_id')->unique()->sort()->values() as $debtorId) {
+                $this->invoices->assertDebtorWithinExposure(
+                    (string) $debtorId, $locked->company_id, 'Shipment start for '.$locked->shipment_no,
+                );
             }
 
             // 11. Deliveries ALLOCATED → SHIPPED.

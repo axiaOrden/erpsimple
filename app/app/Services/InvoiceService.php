@@ -7,6 +7,7 @@ use App\Enums\DeliveryStatus;
 use App\Enums\InvoicePaymentStatus;
 use App\Exceptions\ConfirmationConflict;
 use App\Models\CustomerCredit;
+use App\Models\CustomerMaster;
 use App\Models\DeliveryConfirmation;
 use App\Models\DeliveryItem;
 use App\Models\Invoice;
@@ -57,6 +58,10 @@ class InvoiceService
      */
     public function generateIfTerminal(SalesOrder $order, string $paymentTerm = 'IMMEDIATE', ?string $dueDate = null): ?Invoice
     {
+        // The debtor customer lock is taken INSIDE generate() (see below) so
+        // that invoice creation and every exposure CHECK serialize on the same
+        // row, regardless of which entry point is used.
+
         $order->refresh();
         $order->load('items');
 
@@ -180,6 +185,12 @@ class InvoiceService
 
                 return;
             }
+
+            // Exposure CREATION boundary: hold the debtor's customer row for
+            // the rest of this transaction. Every exposure check locks the
+            // same row, so "check eligibility + create new exposure" can never
+            // interleave with a concurrent invoice for the same debtor.
+            $this->lockDebtor($locked->sold_to_customer_id);
 
             $units = app(ProductUnitService::class);
             $lines = [];
@@ -378,12 +389,21 @@ class InvoiceService
      *   available_credit    = Σ OPEN/PARTIALLY_USED remaining_amount
      *   net_exposure        = max(0, outstanding − available_credit)
      *
+     * `$forUpdate` makes the read a CURRENT (locking) read. The strict-debt
+     * guard requires it: under REPEATABLE READ a transaction's plain-SELECT
+     * snapshot is fixed at its first read, so an invoice committed while this
+     * transaction waited on the debtor lock would otherwise stay invisible and
+     * the guard would wrongly pass. Locking reads always see the latest
+     * committed rows (and the debtor row is already held, so ordering is
+     * unchanged: customer → invoices → credits).
+     *
      * @return array{outstanding: string, available_credit: string, net_exposure: string}
      */
-    public function exposure(string $customerId, ?string $companyId = null): array
+    public function exposure(string $customerId, ?string $companyId = null, bool $forUpdate = false): array
     {
         $invoiceQuery = Invoice::where('customer_id', $customerId)
-            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId));
+            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
+            ->when($forUpdate, fn ($q) => $q->lockForUpdate());
 
         $outstanding = '0.00';
 
@@ -404,6 +424,7 @@ class InvoiceService
         CustomerCredit::where('customer_id', $customerId)
             ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
             ->whereIn('credit_status', ['OPEN', 'PARTIALLY_USED'])
+            ->when($forUpdate, fn ($q) => $q->lockForUpdate())
             ->get(['remaining_amount'])
             ->each(function (CustomerCredit $c) use (&$available) {
                 $available = Decimal::add($available, (string) $c->remaining_amount, 2);
@@ -421,6 +442,17 @@ class InvoiceService
     }
 
     /**
+     * Lock the debtor's customer row FOR UPDATE. THE serialization point for
+     * the strict outstanding-debt rule: invoice creation (exposure) and every
+     * eligibility check acquire this row, and nothing ever acquires another
+     * lock while holding it.
+     */
+    public function lockDebtor(string $customerId): void
+    {
+        CustomerMaster::whereKey($customerId)->lockForUpdate()->first();
+    }
+
+    /**
      * Post-confirmation exposure guard (audit correction, business rule 28):
      * a debtor with positive net exposure must not receive additional
      * commercial exposure at the SAFE boundaries that follow confirmation —
@@ -433,7 +465,14 @@ class InvoiceService
      */
     public function assertDebtorWithinExposure(string $customerId, ?string $companyId, string $action, string $currency = 'NGN'): void
     {
-        $exposure = $this->exposure($customerId, $companyId);
+        // Serialize the eligibility check with exposure CREATION (invoices).
+        // The caller must invoke this AFTER all of its other row locks — the
+        // customer row is deliberately the LAST lock in the lock order (a
+        // sink), so it can never take part in a deadlock cycle.
+        $this->lockDebtor($customerId);
+
+        // current=true: see invoices committed while we waited on the lock.
+        $exposure = $this->exposure($customerId, $companyId, true);
 
         if (Decimal::compare($exposure['net_exposure'], '0', 2) > 0) {
             abort(422, sprintf(
