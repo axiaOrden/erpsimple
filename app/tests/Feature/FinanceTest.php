@@ -23,6 +23,7 @@ use App\Models\PriceConditionItem;
 use App\Models\ProductMaster;
 use App\Models\ProductUnitConversion;
 use App\Models\SalesOrderItem;
+use App\Models\SalesOrderRejectionReason;
 use App\Services\DeliveryService;
 use App\Services\FinanceService;
 use App\Services\InventoryService;
@@ -33,6 +34,7 @@ use App\Services\ShipmentService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Concerns\ProvidesRejectionReasons;
 use Tests\TestCase;
 
 /**
@@ -42,6 +44,7 @@ use Tests\TestCase;
 class FinanceTest extends TestCase
 {
     use DatabaseTransactions;
+    use ProvidesRejectionReasons;
 
     private CompanyMaster $company;
 
@@ -166,10 +169,10 @@ class FinanceTest extends TestCase
         return $this->pod->confirmItem($this->employee, $delivery->delivery_no, 1, $qty, $unit, $reason);
     }
 
-    private function rejectOrderItem($order, string $reason = 'CUSTOMER_REJECTED'): void
+    private function rejectOrderItem($order, string $reason = SalesOrderRejectionReason::CODE_CUSTOMER_REQUEST): void
     {
         $item = SalesOrderItem::where('sales_order_no', $order->sales_order_no)->where('item_no', 1)->firstOrFail();
-        $this->orders->rejectItem($item, $reason, $this->employee);
+        $this->orders->rejectItem($item, $this->reason($reason), $this->employee);
     }
 
     private function confirmedOrderFor($customer, string $qty = '5', string $unit = 'PCS', ?string $price = null)

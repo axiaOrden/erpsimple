@@ -71,14 +71,14 @@ class FieldSalesTest extends TestCase
             'company_id' => $this->companyA->company_id,
             'employee_id' => $this->employeeA->employee_id,
             'customer_id' => $this->customerMine->customer_id,
-            'preferred_day' => 'MONDAY',
+            'preferred_day' => 1,
             'active' => true,
         ]);
         CustomerFjp::create([
             'company_id' => $this->companyB->company_id,
             'employee_id' => $otherEmployee->employee_id,
             'customer_id' => $this->customerOther->customer_id,
-            'preferred_day' => 'TUESDAY',
+            'preferred_day' => 2,
             'active' => true,
         ]);
 
@@ -94,7 +94,7 @@ class FieldSalesTest extends TestCase
         $response = $this->actingAs($this->adminA)->post('/fjp', [
             'employee_id' => $this->employeeB->employee_id, // other company
             'customer_id' => $this->customerMine->customer_id,
-            'preferred_day' => 'MONDAY',
+            'preferred_day' => 1,
         ]);
 
         $response->assertSessionHasErrors('employee_id');
@@ -107,7 +107,7 @@ class FieldSalesTest extends TestCase
             'company_id' => $this->companyB->company_id,
             'employee_id' => $this->employeeB->employee_id,
             'customer_id' => $this->customerOther->customer_id,
-            'preferred_day' => 'MONDAY',
+            'preferred_day' => 1,
             'active' => true,
         ]);
 
@@ -115,7 +115,7 @@ class FieldSalesTest extends TestCase
         $this->actingAs($this->adminA)->patch('/fjp/'.$plan->fjp_id, [
             'employee_id' => $this->employeeA->employee_id,
             'customer_id' => $this->customerMine->customer_id,
-            'preferred_day' => 'FRIDAY',
+            'preferred_day' => 5,
         ])->assertForbidden();
     }
 
@@ -125,7 +125,7 @@ class FieldSalesTest extends TestCase
         $this->actingAs($this->sellerA)->post('/fjp', [
             'employee_id' => $this->employeeA->employee_id,
             'customer_id' => $this->customerMine->customer_id,
-            'preferred_day' => 'MONDAY',
+            'preferred_day' => 1,
         ])->assertForbidden();
     }
 
@@ -133,7 +133,7 @@ class FieldSalesTest extends TestCase
 
     public function test_sales_employee_sees_only_own_visits(): void
     {
-        $today = strtoupper(now()->format('l'));
+        $today = (int) now()->dayOfWeek;
 
         CustomerFjp::create([
             'company_id' => $this->companyA->company_id,
@@ -335,7 +335,7 @@ class FieldSalesTest extends TestCase
         $today = now();
         $currentWeek = app(FjpRotationService::class)->rotationWeek($today);
         $otherWeek = $currentWeek === 4 ? 1 : $currentWeek + 1;
-        $todayName = strtoupper($today->format('l'));
+        $todayName = (int) $today->dayOfWeek;
 
         // Plan for the CURRENT rotation week: must appear.
         $visible = CustomerFjp::create([
@@ -374,7 +374,7 @@ class FieldSalesTest extends TestCase
     {
         config(['fjp.rotation_anchor' => '2026-01-05']);
 
-        $todayName = strtoupper(now()->format('l'));
+        $todayName = (int) now()->dayOfWeek;
 
         CustomerFjp::create([
             'company_id' => $this->companyA->company_id,
@@ -396,7 +396,7 @@ class FieldSalesTest extends TestCase
             'employee_id' => $this->employeeA->employee_id,
             'customer_id' => $this->customerMine->customer_id,
             'preferred_week' => 5,
-            'preferred_day' => 'MONDAY',
+            'preferred_day' => 1,
         ])->assertSessionHasErrors('preferred_week');
 
         $this->assertDatabaseMissing('customer_fjp', ['preferred_week' => 5]);

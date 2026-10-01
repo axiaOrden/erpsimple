@@ -11,6 +11,18 @@
         @apply bg-surface text-on-surface antialiased;
     }
 
+    /*
+     * Alpine cloak. Every x-show element is painted by the browser as soon as
+     * the HTML arrives, i.e. BEFORE app.js boots Alpine and applies its inline
+     * `display: none`. Without this rule the header's profile popover (and the
+     * sync banner) flash open on every navigation — the user only ever saw the
+     * card, never the reason. Marking such markup x-cloak keeps it invisible
+     * until Alpine takes control.
+     */
+    [x-cloak] {
+        display: none !important;
+    }
+
     button,
     a {
         touch-action: manipulation;

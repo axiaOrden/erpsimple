@@ -12,8 +12,8 @@ low-connectivity areas; company admins and superadmins work on desktop/tablet.
 The domain flows in one direction:
 
 ```
-Master data ──► Sales Order (DEMAND ONLY)
-                     │ confirmed → Invoice snapshot (credit blocking anchor)
+Master data ──► Sales Order (DEMAND ONLY; confirmation freezes the commercial
+                     │         snapshot — it creates NO receivable)
                      ▼
                Delivery (inventory ALLOCATION: unrestricted → restricted)
                      │ grouped into Shipment (same company + source customer)
@@ -21,9 +21,9 @@ Master data ──► Sales Order (DEMAND ONLY)
                Shipment START (restricted → 0, immutable GOODS_ISSUE ledger entry)
                      │
                      ▼
-               Delivery Confirmation / POD ──► final invoice (confirmed qty only;
-                     │                          differences stay in transit / return
-                     ▼                          workflows — never auto-credited)
+               Delivery Confirmation / POD ──► Invoice (accepted billable quantity
+                     │                          at billing-terminal state; differences
+                     ▼                          stay in transit / return workflows —
                Payment / Credit Allocation ──► invoice settled → unblocks customer
 ```
 
@@ -32,10 +32,11 @@ Key invariants (enforced in services, not the schema):
 - **Sales Order = demand.** No inventory effect, no reservation. Confirmed demand is immutable.
 - **Delivery = allocation.** `unrestricted_qty -= x`, `restricted_qty += x`. On-hand unchanged. Row-locked, transactional.
 - **Shipment START = physical issue.** `restricted_qty -= x` + `GOODS_ISSUE` movement. Transactional and idempotent (status guard + row lock).
-- **Issued-but-unaccepted stock stays in transit.** GOODS_ISSUE is immutable and POD restores nothing to the source automatically; unaccepted quantity remains in the delivery operation's possession until reallocated or explicitly returned (proposal: docs/TRANSIT_STOCK_CORRECTION.md).
-- **Invoice = snapshot** created at SO confirmation; never rewritten when master pricing changes.
-- **Credit blocking** is independent of stock availability: a customer with a not-fully-settled invoice cannot create another order. (Audit correction: the block is enforced at every safe post-confirmation boundary too — new Delivery allocation and Shipment START. POD / rejection / transit / return of stock that already left the source are deliberately NEVER blocked.)
+- **Issued-but-unaccepted stock stays in transit.** GOODS_ISSUE is immutable and POD restores nothing to the source automatically; unaccepted quantity becomes traceable transit stock in the delivering employee's custody until it is reallocated, returned to the source (with verification) or written off — the implemented Phase 9 model (docs/TRANSIT_STOCK_CORRECTION.md).
+- **SO confirmation = commercial snapshot.** It freezes pricing/deals/terms on `sales_order_item` (immutable, never rewritten when master data changes). It creates NO receivable; the Invoice is generated ONLY when the SO reaches billing-terminal state, from POD-accepted quantities priced off that snapshot.
+- **Credit blocking** is implemented per the Phase 8 rules and is independent of stock availability: a sold-to debtor with positive net exposure cannot confirm another SO, and the same guard blocks new Delivery allocation and Shipment START. POD / rejection / transit / return of stock that already left the source are deliberately NEVER blocked.
 - **Inventory can belong to PRIMARY / SHIP_TO / VAN** customers only (`inventory.customer_id`).
+- **A VAN is a commercial Secondary with ONE unresolved cycle at a time** (audited 2026-10-01): same SO → Delivery → Shipment START → POD → Invoice → Payment lifecycle, no VAN inventory-count / closing-stock / route-settlement subsystem, and a new VAN SO is refused server-side while the previous cycle has unfinished operational work or a positive net exposure (§14).
 
 ## 2. Laravel / directory strategy
 
@@ -46,15 +47,17 @@ request validation in `app/Http/Requests`.
 ```
 app/
   Enums/                  role, status enums mirrored from DDL ENUMs (PHP casts)
-  Models/                 one per DDL table (33)
+  Models/                 one per ERP table as applicable
   Services/
-    SalesOrderService     create/confirm, deal evaluation, invoice snapshot
-    DeliveryAllocationService  row-locked allocation
+    SalesOrderService     create/confirm, deal evaluation, controlled rejections,
+                          dependent DEAL/free closure, commercial snapshot,
+                          VAN one-cycle guard (§14)
+    DeliveryAllocationService  row-locked allocation (+ DEAL/free entitlement via
+                          DealEntitlementService)
     ShipmentService       attach, start (goods issue), complete
     StockCountService     submit + authoritative baseline (restricted==0 guard)
-    InvoiceService        status recalculation
-    PaymentService        record + allocate
-    CreditService         issue + allocate
+    InvoiceService        billing-terminal detection + final invoice generation
+    FinanceService        payments/credits/allocation, exposure & blocking
     SyncService           idempotent offline ingestion
   Http/
     Controllers/ (Web + Api/Offline namespaces)
@@ -103,9 +106,9 @@ transaction), not by the DB.
 - SO customer identifiers (`supplying` / `source` / `sold_to`) are stored and
   validated independently (see risk 3 — the debtor is the sold-to Secondary).
 - **POD is the billing boundary** (Phase 7/8): `invoice.customer_id =
-  sales_order.sold_to_customer_id` and final invoice quantities come from
-  POD-confirmed quantities, priced from the SO item snapshot — never from
-  GOODS_ISSUE; see §10 Finance design.
+  sales_order.sold_to_customer_id` and the final invoice is generated from
+  billing-terminal POD-accepted quantities, priced from the SO item snapshot —
+  never from GOODS_ISSUE and never at SO confirmation; see §11 Finance design.
 - FJP rotation (business correction): `customer_fjp.preferred_week` is a position
   (1–4) in a **continuous 4-week field-sales rotation** — NOT week-of-month, and
   it never resets at month/year boundaries. The cycle Week 1→2→3→4→1… is anchored
@@ -158,11 +161,11 @@ allocations, shipment start, payments/credits requires live server state.
 
 | Operation | Locks | Notes |
 |---|---|---|
-| Delivery allocation | `inventory` row (customer, product) `FOR UPDATE` | validate unrestricted ≥ qty, remaining demand ≥ qty, item not rejected; move unrestricted→restricted; NO movement row |
+| Delivery allocation | `sales_order` row, then ALL its `sales_order_item` rows, then the `inventory` row (customer, product) — all `FOR UPDATE` | validate SO confirmed, item not rejected, remaining demand ≥ qty, unrestricted ≥ qty; a DEAL/free line may additionally claim only the deal entitlement its paid parent line has earned (`DealEntitlementService`, §13.3); move unrestricted→restricted; NO movement row |
 | Delivery release (pre-shipment) | `delivery` + affected `inventory` rows `FOR UPDATE` (deterministic order) | ALLOCATED → DRAFT; restricted→unrestricted; NO movement row; forbidden once attached to a non-DRAFT shipment or `shipped_at` set |
 | Shipment START (Phase 6) | `shipment` → attached `delivery` rows (delivery_no order) → `inventory` rows (customer,product order), all `FOR UPDATE` | READY only; grouped restricted check under lock; restricted -= issued (unrestricted untouched); ONE `GOODS_ISSUE` movement PER DELIVERY ITEM (`reference_type=DELIVERY`, `reference_no=delivery_no`, `reference_item_no=item_no`); deliveries ALLOCATED→SHIPPED; retry `attempts: 2` for deadlocks/MariaDB 1020; idempotent via `shipment_start` scope |
-| SO confirm | `sales_order`, `customer` outstanding check, pricing/deal read | creates immutable invoice snapshot; transitions DRAFT→CONFIRMED→OPEN_DELIVERY |
-| SO item rejection | `sales_order_item` | marks remaining demand rejected; existing allocations untouched, no NEW allocation |
+| SO confirm | `sales_order`, `customer` outstanding (exposure) check, pricing/deal read | FREEZES the commercial snapshot on `sales_order_item` (immutable pricing/deals); creates NO receivable; blocks when the debtor's net exposure is positive; transitions DRAFT→CONFIRMED→OPEN_DELIVERY. The Invoice comes later, at billing-terminal POD state (§11) |
+| SO item rejection | `sales_order_item` | marks remaining demand rejected with a CONTROLLED reason (`sales_order_rejection_reason`, never free text); existing allocations untouched, no NEW allocation; unearned dependent DEAL/free demand closes automatically with the SYSTEM_DEFAULT reason (§13.3) |
 | Authoritative stock count submit | `inventory` rows for count items `FOR UPDATE` | requires `restricted_qty = 0` per customer+product; replaces baseline with ONE immutable `STOCK_COUNT_BASELINE` movement per counted row (`STOCK_COUNT_VARIANCE` deliberately unused — see §7) |
 | Payment/credit allocation | `payment`/`customer_credit` + `invoice` rows | never exceed payment remaining / credit remaining / invoice balance; recompute invoice status |
 | Number generation | inside the service transaction | e.g. `SELECT MAX(...)` or dedicated sequence row |
@@ -211,7 +214,10 @@ allocations, shipment start, payments/credits requires live server state.
 - **Deal evaluation** (`DealService`): always server-side, against basic-unit
   quantities (unit conversions applied — 10 CTN = 240 PCS against a 10-CTN
   qualifier). Rewards emit `line_source=DEAL, is_free_item=true,
-  parent_item_no, deal_no, unit_price=0`. Qualifiers are all-AND (schema PK
+  parent_item_no, deal_no, unit_price=0`. The emitted reward is DEPENDENT
+  fulfilment: it is an independent physical inventory line (§7) whose
+  fulfilment entitlement is earned by its paid parent line and constrained by
+  `DealEntitlementService` (§13.3). Qualifiers are all-AND (schema PK
   implies conjunction). `for_each_qty` grants floor(multiple) rewards. MULTIPLE
   distinct qualifying deals = AMBIGUOUS (no stacking rule) → reported, blocks
   confirmation.
@@ -222,8 +228,12 @@ allocations, shipment start, payments/credits requires live server state.
 - **Immutability & rejection**: only DRAFTs are editable (checked under
   `lockForUpdate` against concurrent confirms). `rejectItem` marks the item
   REJECTED with reason/actor/time while preserving `order_qty`; header status
-  recomputes (PARTIALLY/COMPLETELY_REJECTED). Phase 5 will enforce that
-  rejection blocks NEW delivery allocations only.
+  recomputes (PARTIALLY/COMPLETELY_REJECTED). Phase 5 enforces that rejection
+  blocks NEW delivery allocations only, and §13.3 adds the dependent rule: the
+  parent's rejection automatically closes UNEARNED dependent DEAL/free demand
+  with the automation-only SYSTEM_DEFAULT reason, while free quantity that is
+  already committed and still earned stays deliverable for Shipment/POD
+  accountability.
 - **Demand-only invariant** (proven by test): draft create, edit and confirm
   perform zero inventory writes — no unrestricted/restricted change, no
   `inventory_movement` rows — and demand may exceed stock.
@@ -234,8 +244,11 @@ allocations, shipment start, payments/credits requires live server state.
   happens ONLY when nothing changed and no ambiguity exists — a stale cached
   price never silently becomes a confirmed order (proven by test). Retries
   replay the stored response; no duplicate orders.
-- **Invoice-based credit blocking is NOT implemented** — it requires the
-  unresolved invoice-debtor decision (risk 3) and stays unimplemented by design.
+- **Invoice-based credit blocking** — HISTORICAL (written during Phase 6, before
+  Phase 8 existed): this bullet said blocking was "NOT implemented". Phase 8 has
+  since implemented it (net-exposure guard at SO confirm, Delivery allocation and
+  Shipment START — see §11); the stale claim is superseded and kept only as a
+  marker for readers of the phase history.
 
 ## 7. Phase 5 — inventory & delivery allocation decisions
 
@@ -264,7 +277,9 @@ allocations, shipment start, payments/credits requires live server state.
   `inventory` row is loaded `SELECT ... FOR UPDATE` with customer+product scope
   ONLY (never the whole customer). Under the lock the service re-validates: SO
   confirmed, item not rejected, remaining demand ≥ requested (confirmed demand
-  − already allocated, in basic units), unrestricted ≥ requested. Then it
+  − already allocated, in basic units), unrestricted ≥ requested, and — for a
+  DEAL/free line — that the request stays within the deal entitlement its paid
+  parent line has actually earned (`DealEntitlementService`, §13.3). Then it
   transfers unrestricted → restricted (guarded against any negative value) and
   creates the Delivery/DeliveryItem. Multi-line deliveries are ALL-OR-NOTHING:
   one failing line rolls back the whole document. Original `order_qty` is
@@ -279,26 +294,39 @@ allocations, shipment start, payments/credits requires live server state.
 - **Rejection interaction**: a REJECTED SO item accepts NO new allocation, but
   existing allocations survive untouched (stock stays restricted and continues
   to Shipment in Phase 6). Remaining rejected demand is never returned to
-  unrestricted by rejection.
-- **Free deal lines are physical stock (corrected)**: a DEAL reward item is
-  NOT "allocated with its parent" — it is ordinary physical inventory with a
-  zero commercial price. It gets its OWN Delivery Item (own `product_id`, own
+  unrestricted by rejection. Since §13.3 the parent's rejection also closes its
+  UNEARNED dependent DEAL/free demand automatically (SYSTEM_DEFAULT reason);
+  committed free quantity that is still earned survives untouched like any
+  other allocation.
+- **Free deal lines: physical stock with DEPENDENT fulfilment (corrected in
+  §13.3)**: a DEAL reward item is NOT "allocated with its parent" in the
+  inventory sense — it is an independent physical inventory line with a zero
+  commercial price. It gets its OWN Delivery Item (own `product_id`, own
   quantity/unit, own basic-unit conversion via `product_unit_conversion`), its
-  own unrestricted-stock check at the Delivery source, and its own
-  unrestricted → restricted transfer; Phase 6 will issue its own GOODS_ISSUE.
-  The allocation UI may pre-select the free line alongside its parent for
-  convenience, but the server allocates each line independently. If the reward
-  product lacks unrestricted stock, the whole Delivery fails validation — no
-  stock is invented and the free line is never silently treated as allocated.
-  `unit_price = 0` stays a purely commercial fact; inventory behavior is
-  independent of price (proven by tests: independent stock effects, missing
-  reward stock blocks, no movement from allocation).
+  own unrestricted-stock check at the Delivery source, its own
+  unrestricted → restricted transfer, and its own GOODS_ISSUE in Phase 6. What
+  is NOT independent is its FULFILMENT ENTITLEMENT: the quantity a free line may
+  claim is bounded by what its paid parent line has actually earned —
+  `floor(parent_eligible / qualifier) × reward`, cumulative across Deliveries —
+  enforced by `DealEntitlementService` inside the allocation transaction
+  (§13.3). A free line whose parent is terminally rejected, or whose earned
+  entitlement is exhausted, can never be newly allocated, and a free line
+  without a resolvable parent fails closed. Allocating the free line in the SAME
+  Delivery as its parent is what lets the parent's quantity earn the entitlement
+  in that same operation (the UI may present them together for that reason). If
+  the reward product lacks unrestricted stock, the whole Delivery fails
+  validation — no stock is invented and the free line is never silently treated
+  as allocated. `unit_price = 0` stays a purely commercial fact; inventory
+  behavior is independent of price (proven by tests: independent stock effects,
+  missing reward stock blocks, no movement from allocation), while fulfilment is
+  never independent of the parent's paid demand.
 - **No inventory movement for allocation**: allocation is a stock-state
   transfer, not a physical change — the `inventory_movement` ledger records
   PHYSICAL changes only. Phase 5 implements GOODS_RECEIPT / ADJUSTMENT /
   DAMAGE (admin adjustments, immutable rows, negative adjustments can never
   push unrestricted below zero — restricted stock is untouchable by
-  administration); GOODS_ISSUE / returns belong to Phase 6+. No silent direct
+  administration); GOODS_ISSUE / returns belong to the physical-issue phase
+  (implemented in Phase 6). No silent direct
   editing of inventory quantities exists anywhere.
 - **Concurrency**: mandatory row locking, proven by a REAL MariaDB test
   (`DeliveryConcurrencyTest`): a forked second connection holds `FOR UPDATE`
@@ -350,8 +378,9 @@ allocations, shipment start, payments/credits requires live server state.
   deliberately NOT emitted: the DDL offers both types but no rule for which
   applies when a count replaces the baseline wholesale, so per the spec the
   ambiguity is reported instead of inventing accounting semantics (variance is
-  visible as `stock_count_item.variance_qty`). SECONDARY_OBSERVATION (and
-  VAN_CLOSING for now) are stored/report-only and never touch inventory.
+  visible as `stock_count_item.variance_qty`). SECONDARY_OBSERVATION and
+  VAN_CLOSING are stored/report-only and never touch inventory — no VAN count
+  is required by the sales flow (§14).
   Submitted counts are immutable; creation is scoped to the employee's company
   + `employee_product` scope, and count type must match customer type.
 - **Eloquent limitation (documented)**: `DeliveryItem::salesOrderItem` is a
@@ -372,8 +401,9 @@ allocations, shipment start, payments/credits requires live server state.
   `GOODS_ISSUE` per Delivery Item, deliveries ALLOCATED→SHIPPED (`shipped_at`),
   shipment `started_on` stamped. DRAFT ↔ READY is planning with zero inventory
   effect; READY locks composition; IN_TRANSIT is irreversible through the
-  ordinary workflow (no CANCELLED, no undo-START per ruling — mis-starts need a
-  future explicit compensating physical transaction).
+  ordinary workflow (no CANCELLED, no undo-START per ruling — mis-starts need
+  an explicit compensating physical transaction, which no phase has yet
+  defined).
 - **Ledger reference scheme (approved)**: `DELIVERY / delivery_no /
   delivery_item.item_no` per issue row — never consolidated, even when several
   items share a product (inventory state may group; the ledger stays per
@@ -394,12 +424,19 @@ allocations, shipment start, payments/credits requires live server state.
   OPEN_DELIVERY continues to mean "in fulfillment, not yet POD-confirmed";
   PARTIALLY/COMPLETELY_DELIVERED stay dark until real POD confirmation;
   rejection statuses keep Phase 4 precedence.
-- **COMPLETED deferred**: `IN_TRANSIT → COMPLETED` belongs to the POD
-  workflow (all deliveries POD-terminal), deliberately not implemented in
-  Phase 6. VAN sources issue goods exactly like Primaries; VAN
-  replenishment/closing/return/route settlement remain separate future
-  workflows. POD difference reasons carry NO automatic stock destination —
-  issued ≠ returned; those rules are their own future design.
+- **COMPLETED derivation (implemented in Phase 7)**: `IN_TRANSIT → COMPLETED`
+  fires automatically inside the POD-confirmation transaction when every
+  attached delivery has an outcome for every item (RULED §9.3) — this Phase 6
+  note originally recorded only that COMPLETED was deliberately deferred out
+  of Phase 6.
+  A VAN is a valid stock holder and shipments from a VAN source issue goods
+  exactly like shipments from a Primary — there is NO separate VAN logistics
+  model. VAN inventory counting, closing stock, a VAN replenishment/route
+  settlement subsystem and VAN-specific returns do not exist and are NOT
+  required by the current sales flow: a VAN runs the ordinary commercial
+  cycle (see §14). POD difference reasons carry no automatic stock destination
+  in Phase 6/7 itself — the implemented Phase 9 transit model (§9,
+  docs/TRANSIT_STOCK_CORRECTION.md) now owns those rules.
 - **Concurrency**: two STARTs serialize on the shipment row; START vs release
   on the shared delivery row; all inventory locks follow the global
   (customer_id, product_id) order. MariaDB's `1020 Record has changed since
@@ -414,15 +451,18 @@ allocations, shipment start, payments/credits requires live server state.
 
 - **POD vs stock**: Shipment START already recorded what physically left the
   source (immutable GOODS_ISSUE), and POD never rewrites that ledger — but
-  issued goods the customer does NOT accept do not vanish: they remain in the
-  delivery operation's possession as reusable in-transit stock until they are
-  reallocated to another delivery or explicitly returned to the source.
-  Phase 6/7 deliberately implements no inventory movement for this yet (POD
-  restores nothing to the source automatically); the proposed correction —
-  including damaged-transit handling — is docs/TRANSIT_STOCK_CORRECTION.md
-  (pending approval; NO schema changes proposed for Phase 8). Receiving-side
-  differences also never auto-create credits: unaccepted quantity is simply
-  never invoiced (POD_DAMAGE ≠ customer credit).
+  issued goods the customer does NOT accept do not vanish. Per the IMPLEMENTED
+  Phase 9 transit model (docs/TRANSIT_STOCK_CORRECTION.md REV 3): the POD
+  difference is recorded as traceable TRANSIT STOCK per the
+  (reason × disposition) matrix — REUSABLE custody can be reallocated to another
+  delivery by the holding employee; RETURNED_AT_SOURCE creates a
+  PENDING_SOURCE_RECEIPT that a source-side verification restores (the claiming
+  employee can never verify their own receipt); DAMAGED rows carry liability;
+  SHORT_DELIVERY / OTHER / unknown whereabouts never manufacture stock. POD
+  itself still restores
+  nothing to the source automatically. Receiving-side differences also never
+  auto-create credits: unaccepted quantity is simply never invoiced
+  (POD_DAMAGE ≠ customer credit).
 - **One authoritative confirmation per shipped Delivery Item**, enforced
   under the locked delivery row (the DDL index is non-unique). No overwrite,
   no corrections this phase (RULED §9.4). Quantities are normalized to basic
@@ -449,28 +489,64 @@ allocations, shipment start, payments/credits requires live server state.
 
 ## 10. Implementation phases
 
-1. **Foundation** — Laravel + adapted Breeze, app_user auth, roles/company
-   scoping, Material 3 mobile-first shell, PWA + offline indicator, dashboards. *(this phase)*
-2. **Master data** — companies, units, products, unit conversions, customers,
-   employees, assignments, product scope, searchable selectors.
-3. **Field sales** — FJP, attendance (offline + idempotent sync), customer views.
-4. **Commercial** — pricing, trade deals, Sales Orders (online + offline drafts,
-   sync/conflict), credit blocking.
-5. **Inventory** — inventory, stock counts, delivery allocation (restricted/unrestricted). *(complete)*
-6. **Logistics** — shipments, goods issue, POD / delivery confirmation. *(complete)*
-7. **Finance** — invoices, payments, credits, allocations. *(design prepared — see §10 and docs/PHASE8_DESIGN.md; implementation pending design review)*
-8. **Reporting / hardening** — dashboards, audit, tests, performance, PWA sync tests.
+Explicit sequence — one number per delivered slice:
 
-## 11. Finance design summary (Phase 8 — pending review)
+```
+Phase 1   Foundation
+Phase 2   Master Data
+Phase 3   Field Sales
+Phase 4   Commercial / Sales Order
+Phase 5   Inventory / Delivery Allocation
+Phase 6   Shipment / Goods Issue
+Phase 7   POD / Delivery Confirmation
+Phase 8   Finance
+Phase 9   Transit Stock
+Phase 10  Reporting / Operational Dashboards — next
+Phase 11  PWA / Offline Hardening
+Phase 12  Production Readiness / UAT / Deployment
+```
 
-Full detail in `docs/PHASE8_DESIGN.md`. Key positions, all arising only from
-authoritative POD outcomes:
+Detail of the completed core phases:
+
+- **Phase 1 Foundation** — Laravel + adapted Breeze, app_user auth, roles/company
+  scoping, Material 3 mobile-first shell, PWA + offline indicator, dashboards. *(complete)*
+- **Phase 2 Master Data** — companies, units, products, unit conversions,
+  customers, employees, assignments, product scope, searchable selectors. *(complete)*
+- **Phase 3 Field Sales** — FJP, attendance (offline + idempotent sync), customer views. *(complete)*
+- **Phase 4 Commercial / Sales Order** — pricing, trade deals, Sales Orders
+  (online + offline drafts, sync/conflict), credit blocking. *(complete)*
+- **Phase 5 Inventory / Delivery Allocation** — inventory, stock counts, delivery
+  allocation (restricted/unrestricted). *(complete)*
+- **Phase 6 Shipment / Goods Issue** — shipments (planning, READY composition
+  lock, START = irreversible goods issue). *(complete)*
+- **Phase 7 POD / Delivery Confirmation** — receiving-side confirmation, POD
+  difference recording, transit hand-off, delivery/shipment/SO derivation. *(complete)*
+- **Phase 8 Finance** — invoices at the POD billing boundary, payments,
+  credits, allocations, exposure blocking. *(complete)*
+- **Phase 9 Transit Stock** — custody/traceability for issued-but-unaccepted
+  stock (docs/TRANSIT_STOCK_CORRECTION.md REV 3). *(complete)*
+- **Phase 10 Reporting / Operational Dashboards** — **next**.
+- **Phase 11 PWA / Offline Hardening**.
+- **Phase 12 Production Readiness / UAT / Deployment**.
+
+**Field UX (§13–§13.3) is cross-cutting post-Phase-9 implementation/UAT work, not
+another numbered core phase**: it hardened the sales-employee workspace (field
+workspace, customer registration, lifecycle dashboard, public invoice, field
+settlement, DEAL/free entitlement, controlled rejection reasons, per-unit
+pipeline, public payment evidence) on top of the Phase 1–9 semantics without
+moving any of them.
+
+## 11. Finance design summary (Phase 8 — implemented)
+
+Implemented as designed; full detail in `docs/PHASE8_DESIGN.md`. Key positions,
+all arising only from authoritative POD outcomes:
 
 - **Billing boundary**: the final invoice is created ONLY from POD-confirmed
   quantities × the SO item price snapshot (`sales_order_item.unit_price`,
   price basis converted consistently with quantity — basic-unit fallback
   divides the price by the factor too). SO confirm, allocation, READY and
-  GOODS_ISSUE never create receivables. A short/never-confirmed quantity is
+  GOODS_ISSUE never create receivables — the invoice is generated only at the
+  billing-terminal POD state. A short/never-confirmed quantity is
   simply never invoiced (no invoice-then-credit round trip). Free deal lines
   appear with `unit_price = 0`. Invoices are IMMEDIATE, `due_date =
   invoice_date`; tax/discount inherit the SO snapshots (zeros stay zeros).
@@ -546,18 +622,418 @@ authoritative POD outcomes:
    items (`is_free_item`, unit_price 0). Gross includes them at 0 so quantity audit
    survives. Commercial price zero does NOT mean zero stock: since the Phase 5
    correction, free deal items carry real inventory (own Delivery Item, own
-   allocation, own future goods issue).
+   allocation, own GOODS_ISSUE) while their FULFILMENT ENTITLEMENT stays
+   dependent on the paid parent line (DealEntitlementService, §13.3).
 5. **Price override**: `recommended_price` stored per SO item at order time;
    master pricing changes never touch it (snapshot discipline).
 6. **Multiple orders while unsettled** (rule 21): strictly enforced at confirm
    time on the server, independent of stock. VAN orders included.
 7. **Stock count authority**: PRIMARY_OPERATIONAL submission replaces the baseline
    for counted products at that customer; blocked if any counted product has
-   `restricted_qty > 0` at that customer. SECONDARY/VAN counts are recorded
-   observationally (VAN closing updates VAN stock as variance).
+   `restricted_qty > 0` at that customer. SECONDARY_OBSERVATION and
+   VAN_CLOSING are stored/report-only and NEVER touch inventory —
+   `StockCountService::submitCount()` posts an authoritative baseline only for
+   PRIMARY_OPERATIONAL, so a VAN closing count records an observation
+   (`stock_count_item.variance_qty`) and changes nothing. No VAN inventory
+   count, closing-stock or replenishment workflow is required by the current
+   model (§14).
 8. **`inventory` rows for products not yet stocked**: created lazily on first
    receipt/allocation (row insert is part of the allocation transaction).
 9. **Rejection math**: order 30, allocated 15 → reject remaining 15; the 15 stay
    restricted and ship. Original `order_qty` never changes; status moves to
-   `PARTIALLY_REJECTED` / `COMPLETELY_REJECTED`.
+   `PARTIALLY_REJECTED` / `COMPLETELY_REJECTED`. Dependent DEAL/free demand the
+   rejected 15 was supposed to earn closes automatically (§13.3).
 10. **MariaDB 13**: Laravel 12 supports MariaDB; `utf8mb4_unicode_ci` kept.
+11. **SKU-level payment allocation is NOT derivable (truthful limit).** An
+   invoice may carry several SKUs and be partially settled. `FinanceService`
+   settles PAYMENTS against an invoice and credits it with generic credit
+   notes; it deliberately does not attribute money to individual invoice lines,
+   and no schema column exists to do so. The field lifecycle therefore counts
+   only PAID invoices as GREEN, keeps every accepted-but-not-fully-settled
+   quantity in BLUE, and reports the partial settlement as AMOUNTS
+   (`invoice.settled_amount`, `credit_amount`, `outstandingAmount()`) in a
+   "partially settled invoices" note attached to the SKU row. No paid quantity
+   is ever fabricated. Implementing per-SKU settlement would be a schema and
+   business change (explicit line-level allocation with a business ruling),
+   out of scope for this redesign.
+12. **No tax model exists (conditional display only).** The schema carries no
+   taxable flag or tax rate: the only tax concept is
+   `price_condition_item.tax_type` (OUTPUT_TAX / INPUT_TAX / NONE) plus
+   `*_tax_amount` columns that default to zero. No rate is invented anywhere.
+   The public invoice page and the invoice JPG render Tax (and Discount,
+   Settled, Outstanding, due date) rows ONLY when the value is non-zero or
+   applicable, so a non-taxable sale shows `Subtotal / Total` alone. A real tax
+   model would need a minimal requirement first: a rate source, a taxable
+   classification per product, and a rounding/collection ruling.
+
+## 13. Sales-employee field UX (implemented)
+
+The sales-employee experience was rebuilt as a mobile field-sales workspace
+(trading-app information density and navigation principles; erpSimple's
+Material 3 identity). No Phase 1–9 semantic moved: SO = demand, Delivery =
+reversible allocation, Shipment START = irreversible goods issue, POD =
+acceptance, Invoice = accepted billable quantity, transit = issued-but-
+unaccepted stock, payment = settlement.
+
+**Information architecture** — one responsive IA for phone and desktop
+(`resources/views/components/nav-links.blade.php`, `layouts/app.blade.php`):
+five persistent destinations Home / FJP / Orders / Inventory / More, rendered
+as a bottom bar on mobile and the same five as a rail on desktop. Home carries
+the context tabs Primary / Secondary / More (`primary.index`,
+`secondary.index`, `more.index`) as compact context switches over one dataset,
+not separate module menus; administrators' navigation is unchanged.
+
+**Today's lifecycle** (`SalesLifecycleService::todayLifecycle`, read-only).
+Demand = SOs CONFIRMED today for the signed-in employee in the signed-in
+company; products outside the employee's `employee_product` scope are
+excluded. HISTORICAL NOTE: the ORIGINAL Phase-13 pipeline converted every
+product to CTN through `product_unit_conversion` (showing a "no CTN
+conversion" note otherwise) and presented one bar per SKU; §13.3 REPLACED that
+with grouping by ORDER QUANTITY UNIT — no global CTN conversion — with one
+pipeline per unit and a RED rejected bucket:
+
+```
+ORANGE  open / not allocated
+YELLOW  allocated (into a Delivery without a terminal POD outcome; this
+        includes dispatched-but-unaccepted transit custody, because transit is
+        the same allocation ladder — never a second quantity)
+BLUE    delivered · unpaid (POD-accepted quantity whose invoice is not fully
+        settled)
+GREEN   delivered · paid (POD-accepted quantity on a PAID invoice)
+RED     rejected · not delivered (terminally rejected demand — never also
+        orange; buckets are mutually exclusive)
+```
+
+The buckets are partitioned from the same POD/outcome rows InvoiceService
+bills from, so one physical quantity sits in exactly one bucket. Colour is
+never the only indicator: every bucket has a label and an accessible name.
+
+**Derived order categories** (`classifyOrders` / `orderAnalysis`; no new SO
+status): ONGOING = remaining fulfillable demand, an unfinished
+allocation/shipment/POD, or outstanding money; COMPLETED = none of those (a
+fully rejected SO with nothing left to process is COMPLETED). `orders.index`
+defaults its window to today → today and splits the two categories into tabs;
+`orders.show` renders the document lifecycle SO → Delivery → Shipment → POD →
+Invoice → Payment with the contextual next action, and the customer context
+page (`visits.customer`) exposes Inventory Count / Create New Order plus open
+orders, recent purchases, plan and exposure so the employee never has to leave
+the customer and re-search a global module.
+
+**Field writes introduced** (thin endpoints reusing existing services):
+
+| area | entry point | ruling |
+|------|-------------|--------|
+| register customer | `secondary.create` / `secondary.store` → `CustomerRegistrationService` | creates a SECONDARY customer + `customer_employee` assignment; editing existing customers stays admin-only |
+| GPS capture | hidden inputs + `geo.reverse` → `ReverseGeocoder` | coordinates come from the device only (server-validated, never typed); reverse geocoding pre-fills text and never moves the marker or overwrites a correction |
+| phone | `PhoneNumberService` | dial code fixed (+234); `0801…`, `801…`, `+234801…`, `234801…` all canonicalize to `+2348012345678`; exact national length; server-authoritative |
+| duplicate guard | advisory lock + `uq_cm_phone_canonical` | check + create serialized per canonical number (`GET_LOCK`), 1062 → "Customer already exists" prompt |
+| preferred visit | `CustomerRegistrationService::syncPreferredVisits` | writes `customer_fjp` (the project's one schedule model); a match with today joins today's FJP, and registration never writes attendance |
+| record payment | `payments.record.create` / `payments.record.store` → `FinanceService` | field methods only: BANK_TRANSFER_TO_PRIMARY / POS_AT_PRIMARY / CASH_AT_PRIMARY (the customer pays the Primary; the employee never receives cash); confirmation updates finance state through the existing service |
+| payment evidence | `PaymentEvidenceService` (`payment_evidence`) | MIME/real-image/size/ownership validated BEFORE any money is recorded; watermark text is presentation only, GPS is stored as structured columns |
+| customer invoice | `invoice.public` + `invoice.public.image` | 43-char random token (32 random bytes, base64url) — never a sequential id; public page is read-only and contains no form |
+| invoice image | `InvoiceImageService` | GD JPEG (~1240 px) generated from invoice data with conditional rows, never a dashboard screenshot |
+
+**Client assets** (`resources/js/customer-map.js`, `resources/js/payment-proof.js`):
+capture-only GPS with `[Refresh GPS]`, MapLibre + CARTO raster preview with the
+marker (the map library is a lazy ~1 MB chunk fetched only on the registration
+screen — the field bundle stays small), and EXIF-aware resize/watermark/JPEG
+conversion of payment proof before upload. Client work is optimization only:
+the server re-validates type, size, ownership, the invoice relationship and the
+image itself for every artifact.
+
+**Schema deltas** (mirrored in `ddl.sql`, `app/database/schema/erp-schema.sql`
+and the incremental `app/database/schema/2026_10_01_sales_employee_ux.sql`):
+`customer_master.phone_canonical` + `uq_cm_phone_canonical`;
+`invoice.public_token` + `uq_invoice_public_token`; `payment.payment_method`
+extended with the three Primary-routed field methods (legacy values retained);
+new `payment_evidence` table (payment FK, stored path/original name/MIME/bytes,
+structured GPS, capture time, watermark text, uploading employee).
+
+### 13.1 UAT correction pass (2026-10-01)
+
+The UAT round kept every semantic above and corrected the surrounding detail.
+
+**Invoice identity.** `InvoicePartyService` resolves the invoice's parties: the
+SELLER is the supplying customer (Primary, i.e. the bill-to party that supplies
+the goods); the DEBTOR is `invoice.customer` (the sold-to Secondary, unchanged);
+a separate warehouse party is shown only when source and supplying customer
+differ. The public page header, the finance invoice screen and the JPG all use
+that resolution, and the footer reads
+`Powered by {employee_id} - {employee_name}` plus the company name and a
+`Scan Me` QR. The raw public URL is deliberately never drawn or printed — the
+QR is the only carrier of the link.
+
+**Invoice image.** `InvoiceImageService` renders A4 portrait at 150 dpi
+(1240 × 1754). Content taller than one sheet is uniformly downscaled (never
+cropped, never paginated into a second file) and the footer strip is pinned to
+the sheet bottom. Tax, Discount, Settled, Outstanding and due date rows are
+conditional; an invoice without tax shows Subtotal / Total only. Column
+geometry is measured so totals never overlap.
+
+**Unit of measure continuity.** A product's BASE unit comes from
+`product_master.basic_unit`; alternate selectable units are only those with a
+maintained `product_unit_conversion` row (non-zero numerator and denominator).
+The chosen SO line unit is carried through allocation, shipment and POD as a
+hidden field rendered as a read-only badge — the fulfilment forms never offer a
+unit picker, and `ProductUnitService` keeps the exact rational conversion
+internally (6 CTN → 4 CTN + 4 CTN + 4 CTN stays CTN). Stock Count rows read the
+base unit from the product and display it read-only. Quantity inputs are fluid
+(`w-full min-w-0`) so no 360–450 px viewport overflows.
+
+**FJP weekday.** `customer_fjp.preferred_day` is numeric `TINYINT UNSIGNED`
+(0 = Sunday … 6 = Saturday) with `idx_fjp_plan (company_id, employee_id,
+preferred_day)`; `preferred_week` stays numeric. The migration
+`app/database/schema/2026_10_01_fjp_numeric_day.sql` converts legacy ENUM names
+case-insensitively, asserts zero unmapped rows and only then tightens the
+column. `App\Enums\Weekday` owns parsing/labels, `CustomerFjp::visitChip()`
+renders the compact `[W1-Mon]` chip used by FJP, today's plan and the customer
+profile, and every FJP query is scoped company + employee + active.
+
+**Today's lifecycle proof.** The regression fixture pins 100 CTN of demand to
+20 open / 30 allocated / 25 accepted-unpaid / 25 accepted-paid and asserts
+exact conservation (110 with a rejected 10 CTN order), so the dashboard
+visualisation can never hide an arithmetic error behind styling. (The fixture
+was rewritten in §13.3 to the 20/20/20/25/15 five-bucket shape with a RED
+rejected bucket.)
+
+**Test totals.** 325 tests / 1441 assertions before this pass → 345 / 1632
+after (`php artisan test`), Pint clean, `npm run build` green (pre-existing
+chunk-size and ineffective-dynamic-import warnings only).
+
+### 13.2 Manual-UAT defect pass (2026-10-01)
+
+Three reported defects, no semantic change to any phase.
+
+**Invoice header collision.** The renderer drew the `INVOICE` title and the
+invoice number at the SAME hard-coded baseline (96), so any invoice number
+visibly overlapped the title. `InvoiceImageService::headerGeometry()` is now the
+single source of truth for a measured two-column header: the right column's rows
+(`INVOICE`, invoice no, invoice date, sales order, optional due date) are stacked
+using real FreeType ink metrics (`imagettfbbox`, offset by 1 px) with a guaranteed
+8 px gap, and every row is shrink-wrapped and wrapped inside a budget; the left
+seller column is constrained by the measured right column. One uniform scale
+(floor 0.6) shrinks the whole header for pathological identifiers, and strings
+are broken at `/ _ . -` (then per character) so nothing is ever dropped or leaves
+the A4 text area. Seller = supplying Primary, debtor = sold-to Secondary and the
+powered-by/QR footer are unchanged.
+
+**Header chrome painting pre-boot.** `x-show` elements are painted by the browser
+as soon as the HTML is parsed, i.e. before `app.js` boots Alpine and writes its
+inline `display: none`. With no `x-cloak` anywhere in the project, the profile
+popover rendered open during that window on every navigation — the "menu opens by
+itself while navigating" report. `[x-cloak] { display: none !important }` is now
+in `resources/css/app.css` and every pre-boot `x-show` chrome element carries
+`x-cloak` (profile popover, sync banner, FJP GPS/result/pending hints,
+registration GPS note). Alpine components that already emit an inline
+`display: none` (dropdown, modal) need none. The popover is also `w-64` below
+`sm` so the right-anchored 288 px card cannot overhang a 360 px viewport.
+
+**Home dashboard pipeline.** HISTORICAL: the Home originally showed an
+order-count headline with aggregate status tiles; the 13.2 pass replaced that
+with one bar per SKU. §13.3 has SINCE REPLACED the per-SKU pipeline with
+GROUPING BY ORDER QUANTITY UNIT (no global CTN conversion): one
+`x-lifecycle-bar` per unit — a single track scaled to that unit's active
+lifecycle quantity whose widths ARE the quantities, split into the orange ORDER
+segment and the amber/blue/green PROCESSING group plus the RED rejected
+segment, with both sides repeated as numbers and labels, the compact five-row
+legend, `N UNIT in play today` per group and the per-unit product/order
+drill-down. The headline aggregate is a quantity, never an order count.
+
+**Test totals.** 345 tests / 1632 assertions before this pass → 348 / 1733
+after (`php artisan test`), Pint clean (202 files), `npm run build` green
+(pre-existing chunk-size and ineffective-dynamic-import warnings only).
+
+### 13.3 Live-UAT correction pass (2026-10-01)
+
+Eighteen reported defects/requests. No phase invariant is changed: allocation
+still serializes on the sales-order row, goods issue stays immutable, transit and
+custody rules are untouched, finance still owns money and one final invoice per
+sales order remains the model.
+
+**A DEAL/free line can no longer outlive its parent.** A free line is DEPENDENT
+fulfilment. `App\Services\DealEntitlementService` derives, per (parent line, deal,
+reward product):
+
+```
+eligible_free = floor(parent_eligible_qty / qualifier_per_multiple_qty) × reward_qty
+```
+
+`parent_eligible_qty` is the paid parent's CUMULATIVE allocated quantity in basic
+units (non-released deliveries only) PLUS the parent quantity requested in the
+same operation — so splitting a deal across deliveries can never mint duplicate
+entitlement, and free quantity can never move ahead of its parent. The
+per-multiple basis is the deal's `for_each_qty` when maintained, else the
+qualifier minimum, converted through the EXISTING `ProductUnitService` conversion
+of the qualifier product (nothing is hard-coded to PCS); the reward is converted
+to the free product's basic unit. Sibling free lines of the same parent/deal/reward
+product SHARE one entitlement. `DeliveryService` enforces this inside the
+allocation transaction after `SalesOrder` and `sales_order_item` are locked
+(`lockedOrderItems()`, `requestedBasicByItem()`): an unresolvable parent fails
+closed, a request above the earned entitlement is a 422 that prints the
+entitlement note, and nothing is written. `allocationContext()` exposes
+`effective_remaining_basic`, `dependency` and `dependency_note`, which the Create
+Delivery screen renders as `Deal entitlement · parent fulfilled/allocated 6 / 12
+PCS · free currently eligible 0 PCS` instead of presenting the free line as
+independent demand.
+
+**Rejecting the parent closes dependent free demand.** `SalesOrderService`
+`rejectItem()` now takes a `SalesOrderRejectionReason` MODEL (free text is never
+accepted) and, after the parent's rejection, auto-rejects every free line from
+`DealEntitlementService::closableFreeLines()` with the automation-only
+SYSTEM_DEFAULT reason. A line is closable when it still has unmet demand of its own
+AND either its earned entitlement is exhausted or nothing of it was ever
+committed; a free line that already committed quantity and still holds earned
+entitlement is left deliverable, so dispatched free stock stays accountable
+through Shipment/POD/custody — no Goods Issue or allocation row is ever erased.
+
+**Controlled rejection reasons.** New master table
+`sales_order_rejection_reason` (reason_id, reason_code, reason_name,
+user_selectable, active) seeded 0 `SYSTEM_DEFAULT` (not selectable), 1
+`CUSTOMER_REQUEST`, 2 `UNAVAILABLE_STOCK`; `sales_order_item.rejection_reason_id`
+links it (FK `fk_soi_reject_reason`) while the legacy `rejection_reason` text column
+keeps a readable snapshot. `app/database/schema/2026_10_01_rejection_reason_master.sql`
+migrates recognizable legacy text to 1/2, preserves every other historical string
+untouched (dev keeps one unlinked legacy row) and prints
+`unlinked_legacy_rejections`. Both `ddl.sql` and the canonical mirror carry the
+table, column and FK. The controller validates `rejection_reason_id` against
+`Rule::exists(... user_selectable = TRUE AND active = TRUE)`, and the order screen
+renders only `userSelectableOptions()`, printing a SYSTEM chip for automatic
+closures.
+
+**Invoicing only what the customer accepted.** `InvoiceService::invoiceableBasicQty()`
+now walks the traceability chain SO item → Delivery item → Shipment → POD
+confirmation → invoice item: only shipped rows (SHIPPED/PARTIALLY_DELIVERED/
+DELIVERED) whose recorded product matches the SO item count; rows without a POD
+outcome or with a POD REJECTED contribute zero; each confirmation contributes its
+OWN confirmed unit converted to basic and is clamped to what that row shipped. The
+ordered quantity, the SO completion status, the rejection status and the order
+total no longer influence billable quantity. Free lines are structurally
+zero-priced (unit price/discount/tax/subtotal forced to 0.00 and excluded from
+gross/discount/tax), so a malformed legacy free-only delivery can never bill the
+parent's value — it produces a 0.00 invoice with the accepted free quantity shown
+for transparency.
+
+**POD mobile layout and conditional fields.** `pod/show.blade.php` renders ONE
+card per delivery item — product (+ FREE badge), `Shipped: {qty} {unit}`, the
+Confirmed Qty input with a read-only unit badge, Reason for Difference, Stock
+Custody Position, Other Remarks and the Confirm Item button, all stacked at mobile
+width (nothing sits horizontally beside anything). Reason and custody are required
+/enabled only while confirmed < shipped; an equal quantity keeps the system's NONE
+semantics and needs neither. The card's attribute list is closed by the tag's own
+`>` (an earlier `@endunless>` closed the `<div>` early and leaked
+`data-pod-item="n">` into the page as text).
+
+**Public invoice payment evidence.** The QR/public invoice now shows every payment
+authoritatively ALLOCATED to that invoice (method, status, amount, applied amount,
+reference, confirmation date) with its proof of payment. Evidence is served by a
+new token-scoped read-only route
+`/invoice/public/{token}/payments/{payment}/evidence/{evidence}` that must satisfy
+four guards: the evidence belongs to that payment, the payment is allocated to the
+token's own invoice, the payment matches the invoice's customer AND company, and
+the stored mime is in `erp.payment_evidence.mimes` with a known extension and an
+existing file. Any mismatch is a 404, the response carries a neutral filename and
+`X-Content-Type-Options: nosniff` + `private, no-store`, and no internal storage
+path or original filename is ever exposed. The page remains read-only (no form, no
+POST verb) — it grants nothing beyond that invoice's payments and their proofs.
+
+**Per-unit Home pipeline.** The Home lifecycle is grouped by ORDER QUANTITY UNIT
+(no global CTN conversion): `SalesLifecycleService::unitGroups()` returns one group
+per unit with ordered/allocated/unpaid/paid/rejected buckets, `bucket_sum`,
+`balanced` and an order count, and `x-lifecycle-bar` renders one pipeline per unit —
+open (orange), the allocated/unpaid/paid processing group (amber/sky/emerald) and
+rejected (red, terminally rejected and NOT delivered, never also orange) with a
+compact five-row legend, every quantity also printed as a number. The conservation
+fixture pins 100 CTN to 20/20/20/25/15 and asserts the exact widths and totals.
+
+**Searchable stock-count product selector.** The count screen's product field is an
+Alpine combobox backed by the existing authorized `search.products` endpoint
+(company ∩ `employee_product`, active, name OR sku, limit 15); its offline fallback
+filters the already-scoped catalog. The submitted value is the chosen
+`product_id` alone (a hidden input — never free text) and the unit is the selected
+product's read-only base unit; `StockCountService` re-validates the scope server
+side, so a crafted id is a 403.
+
+**Incidental hardening.** `InvoiceImageService::wrap()` ignored its `$bold` flag,
+so a BOLD block was measured against the regular face and a wrapped seller line
+could overhang its column by a pixel or two; the wrap now measures the face it
+draws, and the reported seller-column width rounds up like the measured line
+widths so "every line fits" is an exact comparison.
+
+**Test totals.** 348 tests / 1733 assertions before this pass → 368 / 1950
+after (`php artisan test`), Pint clean, `npm run build` green (pre-existing
+chunk-size and ineffective-dynamic-import warnings only). New coverage:
+`DealFreeDependencyTest` (13 — the A–I/L/M business cases above, including
+unit-generic entitlement and stock conservation), `DealEntitlementConcurrencyTest`
+(a forked child commits a competing free allocation while holding the order lock;
+the racing delivery blocks and is refused), `PublicInvoiceEvidenceTest` (2 —
+evidence served through the correct token, every mismatched token/payment/evidence
+combination 404) and `ProductSearchScopeTest` (3 — authorized results only, scoped
+catalog on the page, server-side re-validation), plus the rewritten per-unit
+dashboard tests in `SalesEmployeeUxTest`.
+
+## 14. VAN operational model (audited 2026-10-01)
+
+Business ruling: a VAN is **commercially a Secondary customer**. It follows the
+ordinary lifecycle — no VAN inventory-count, closing-stock, route-settlement or
+replenishment subsystem exists or is required:
+
+```
+Create VAN Sales Order → Delivery / source allocation → Shipment → READY
+(composition locked) → START (GOODS_ISSUE from the actual source) → POD →
+Invoice → Payment / settlement → cycle closed
+```
+
+- **No VAN stock counting is required**: `CountType::VAN_CLOSING` is
+  stored/report-only and posts nothing (`StockCountService::submitCount()` is
+  authoritative for PRIMARY_OPERATIONAL only — §7, risk 7). The field directory
+  merely SUGGESTS the matching count type for a VAN customer; no step of the
+  VAN sales flow requires a count and nothing reads it back.
+- **A POD difference never becomes VAN stock.** The unaccepted quantity moves
+  into the implemented Phase 9 transit/custody workflow (§9) — REUSABLE custody
+  the holder can reallocate, PENDING_SOURCE_RECEIPT verified at the source,
+  DAMAGED liability, or a DISCREPANCY when the whereabouts are unknown. No VAN
+  inventory balance is invented and no count is needed to resolve it.
+- **One unresolved cycle at a time.** Before a new VAN SO is created or
+  confirmed, the server requires that the VAN has no unfinished previous cycle
+  and no positive net exposure. "Unfinished" is DERIVED from existing states
+  only (no new status enum): open demand not yet allocated; a released
+  allocation awaiting re-allocation; an allocated delivery not yet dispatched;
+  dispatched quantity awaiting its POD outcome; POD-accepted quantity not yet
+  invoiced. The financial condition is the EXISTING Phase 8 net exposure
+  `max(0, invoice_outstanding − available_credit)` — a fully settled invoice or
+  sufficient customer credit never blocks, and terminal history
+  (COMPLETELY_REJECTED with nothing left to process, a settled completed cycle)
+  never blocks forever. A DRAFT order is not demand and never blocks another
+  order (it creates no physical or financial obligation and no delete/cancel
+  workflow exists for it), but it can only be confirmed once the VAN is clear.
+- **Where it is enforced**: one centralized guard,
+  `SalesOrderService::vanCycleStatus()` (derivation, reusing
+  `SalesLifecycleService` so the lifecycle screen and the rule can never
+  disagree) with `assertVanCycleClear()` called by `createDraft()` (online and
+  `sync/order-drafts`) and the same determination called by `confirm()` — never
+  in a controller, never in the UI. The order-capture screen only EXPLAINS the
+  refusal and links the blocking document(s).
+- **Concurrency/locking**: enforcement runs inside the creating/confirming
+  transaction, which locks the VAN's `customer_master` row `FOR UPDATE`. For a
+  VAN order the sold-to customer IS the Phase 8 debtor, so this is the exact
+  serialization point finance already uses (invoice creation, exposure checks,
+  allocation, START) — the lock order is unchanged and the row stays a lock-order
+  **sink**: nothing below ever waits on a lock while holding it (only the
+  transaction's own draft rows, locked earlier, are written). `confirm()` takes
+  the row with the same locking read that identifies the customer and derives
+  the state BEFORE any plain read, so a competing confirmation that committed
+  while this request waited on the row is always visible (locking reads do not
+  establish the REPEATABLE READ snapshot) and the loser is refused with the
+  blocking document rather than allowed to open a second cycle.
+- **Rejected demand** keeps its existing terminal semantics: a terminally
+  rejected VAN order with no remaining physical or financial work is COMPLETED
+  and does not block; dispatched quantity followed by rejection stays blocked
+  until its POD outcome is recorded, and the accepted quantity is still
+  invoiced from POD.
+- **Ordinary Secondary customers are unaffected**: the guard returns
+  immediately unless the sold-to customer is a VAN, so several unresolved
+  Secondary cycles remain possible exactly as before.
+
+Regression coverage: `VanCycleTest` (A–K plus a Secondary control) and
+`VanCycleConcurrencyTest` (two concurrent VAN confirmations — one wins, one is
+refused, exactly one active cycle; plus a no-contention canary).

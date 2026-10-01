@@ -61,18 +61,37 @@
                         </div>
                     </div>
 
+                    @if ($line['dependency_note'])
+                        {{-- A FREE deal line is DEPENDENT fulfilment: it can never claim more
+                             than the deal entitlement its paid parent line has earned. --}}
+                        <p class="text-[11px] text-on-surface-variant">{{ $line['dependency_note'] }}</p>
+                    @endif
+
                     @if ($allocatable)
-                        <div class="flex gap-2 items-center">
-                            <input type="number" name="lines[{{ $loop->index }}][sales_order_item_no]" value="{{ $line['item_no'] }}" hidden>
-                            <input type="number" name="lines[{{ $loop->index }}][qty]" step="0.001" min="0"
-                                   max="{{ rtrim(rtrim((string) $maxBasic, '0'), '.') }}"
-                                   placeholder="Deliver qty"
-                                   class="w-32 rounded-m border-outline-variant bg-surface text-sm">
-                            <select name="lines[{{ $loop->index }}][unit]" class="rounded-m border-outline-variant bg-surface text-sm">
-                                @foreach (['PCS', 'CTN', 'KG', 'TON'] as $u)
-                                    <option value="{{ $u }}" @selected($u === $line['order_unit'])>{{ $u }}</option>
-                                @endforeach
-                            </select>
+                        <div class="flex items-center gap-2">
+                            <input type="hidden" name="lines[{{ $loop->index }}][sales_order_item_no]" value="{{ $line['item_no'] }}">
+
+                            {{--
+                                Allocation is recorded in the SALES ORDER LINE's
+                                order unit — the employee cannot switch it
+                                here (the unit is a label, not a picker). The
+                                conversion to the product's basic unit for
+                                stock math happens server-side, unchanged.
+                            --}}
+                            <input type="hidden" name="lines[{{ $loop->index }}][unit]" value="{{ $line['order_unit'] }}">
+
+                            <div class="min-w-0 flex-1">
+                                <label class="block text-[11px] text-on-surface-variant" for="deliver-qty-{{ $loop->index }}">Deliver qty</label>
+                                <input id="deliver-qty-{{ $loop->index }}" type="number" name="lines[{{ $loop->index }}][qty]" step="0.001" min="0"
+                                       max="{{ rtrim(rtrim((string) $maxBasic, '0'), '.') }}"
+                                       inputmode="decimal" placeholder="0"
+                                       class="mt-0.5 w-full min-w-0 rounded-m border-outline-variant bg-surface text-sm">
+                            </div>
+                            <div class="shrink-0 text-center">
+                                <span class="block text-[11px] text-on-surface-variant">Unit</span>
+                                <span class="mt-0.5 inline-grid h-[2.375rem] min-w-14 place-items-center rounded-m bg-surface-variant px-2 text-sm font-medium"
+                                      aria-label="Order unit: {{ $line['order_unit'] }}">{{ $line['order_unit'] }}</span>
+                            </div>
                         </div>
                         @if ($transitBalance > 0)
                             <div class="flex gap-2 items-center mt-1">
@@ -88,6 +107,8 @@
                         <p class="text-xs {{ $line['rejection_status'] !== 'NONE' ? 'text-error' : 'text-on-surface-variant' }}">
                             @if ($line['rejection_status'] !== 'NONE')
                                 Rejected demand — no new allocation.
+                            @elseif ($line['dependency'])
+                                Free deal quantity not yet earned — no free quantity is currently eligible. Allocate the paid parent line first; free quantity never moves ahead of its parent.
                             @else
                                 Nothing allocatable (remaining {{ rtrim(rtrim($line['remaining_basic'], '0'), '.') }}, unrestricted {{ rtrim(rtrim($line['unrestricted_qty'], '0'), '.') }}).
                             @endif

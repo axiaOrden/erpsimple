@@ -15,6 +15,7 @@ use App\Models\EmployeeProduct;
 use App\Models\ProductMaster;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderItem;
+use App\Models\SalesOrderRejectionReason;
 use App\Models\UnitMaster;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,17 @@ use Illuminate\Support\Facades\DB;
  * fixed Primary → Secondary mapping (a Secondary may be served through any
  * of the employee's assigned Primaries, but never through an unassigned one).
  * Customers remain global and carry no company_id.
+ *
+ * VAN one-cycle rule (audited 2026-10-01): a VAN is commercially a Secondary
+ * customer — same SO → Delivery → Shipment START → POD → Invoice → Payment
+ * lifecycle, no VAN inventory-count / closing-stock / route-settlement
+ * subsystem — but it may hold only ONE unresolved cycle at a time. A new VAN
+ * SO is refused while the previous cycle still has operational work
+ * (unallocated demand, a released allocation, an undispatched allocation,
+ * dispatched quantity awaiting POD, POD-accepted quantity not yet invoiced)
+ * or a positive Phase 8 net exposure. The rule is server-side, derived from
+ * existing states only and enforced under the VAN's own customer_master row
+ * lock; ordinary Secondary customers are never restricted this way.
  */
 class SalesOrderService
 {
@@ -45,6 +57,8 @@ class SalesOrderService
         private readonly DealService $deals,
         private readonly ProductUnitService $units,
         private readonly InvoiceService $invoices,
+        private readonly DealEntitlementService $entitlements,
+        private readonly SalesLifecycleService $lifecycle,
     ) {}
 
     /**
@@ -159,6 +173,14 @@ class SalesOrderService
             ]);
 
             $this->replaceItems($order, $lines, $companyId, $soldTo->sales_region);
+
+            // VAN one-cycle rule — LAST lock of this transaction (see
+            // assertVanCycleClear): the lines are already written, so no
+            // insert can wait on a lock while the VAN row is held. Drafts are
+            // excluded from the check itself: a DRAFT is not demand and carries
+            // no physical/financial obligation, so it can never trap a VAN
+            // (and the confirmation boundary re-checks authoritatively).
+            $this->assertVanCycleClear($soldTo->customer_id, $companyId, $order->sales_order_no);
         });
 
         return ['order' => $order->fresh(['items']), 'warnings' => []];
@@ -221,6 +243,35 @@ class SalesOrderService
 
                 if ($order->order_status !== OrderStatus::DRAFT) {
                     abort(422, 'Order was already confirmed.');
+                }
+
+                // VAN one-cycle rule (audited 2026-10-01) — FIRST statement
+                // after the order lock, BEFORE any plain read of this
+                // transaction. The customer row is locked with the SAME
+                // locking read that identifies the customer, so the guard's
+                // (non-locking) determination afterwards runs on a read view
+                // created AFTER the lock: a competing VAN confirmation that
+                // committed while this request waited on that row is therefore
+                // always visible, and the loser is refused with the blocking
+                // document(s). For a VAN order this row IS the Phase 8 debtor
+                // row (sold-to = debtor), so the lock order is unchanged — it
+                // is still taken as a sink, and nothing below ever WAITS on a
+                // lock while holding it (only this DRAFT's own rows, already
+                // locked above, are written).
+                $soldToCustomer = CustomerMaster::whereKey($order->sold_to_customer_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($soldToCustomer !== null && $soldToCustomer->customer_type === CustomerType::VAN) {
+                    $vanBlock = $this->vanCycleStatus(
+                        $soldToCustomer->customer_id, $order->company_id, $order->sales_order_no, $order->currency,
+                    );
+
+                    if ($vanBlock !== null) {
+                        $conflicts[] = $vanBlock['message'];
+
+                        throw new ConfirmationConflict($conflicts);
+                    }
                 }
 
                 // Product scope re-validation (employee_product; empty = all
@@ -388,8 +439,22 @@ class SalesOrderService
      * Reject a CONFIRMED item (rule 11): marks remaining demand rejected.
      * Original order_qty is preserved; existing delivery allocations are not
      * touched (Phase 5 continues from here).
+     *
+     * Reasons are CONTROLLED master data — free text is never accepted from a
+     * user. `rejection_reason` keeps a readable snapshot of the reason name
+     * (legacy history keeps its original text), while `rejection_reason_id`
+     * links the authoritative lookup row.
+     *
+     * Dependent DEAL/free demand is closed AUTOMATICALLY: a free line can only
+     * be fulfilled out of what its paid parent line actually earned, so once
+     * the parent's remaining demand is terminally rejected every dependent
+     * free line that is no longer backed (and that has committed nothing
+     * physically) becomes non-fulfillable and is rejected with the
+     * automation-only SYSTEM_DEFAULT reason. The employee never has to reject
+     * each generated free line by hand, and no historical allocation, Goods
+     * Issue or custody row is ever erased.
      */
-    public function rejectItem(SalesOrderItem $item, string $reason, EmployeeMaster $rejectedBy): SalesOrderItem
+    public function rejectItem(SalesOrderItem $item, SalesOrderRejectionReason $reason, EmployeeMaster $rejectedBy): SalesOrderItem
     {
         if ($item->salesOrder->order_status === OrderStatus::DRAFT) {
             abort(422, 'Draft items are edited, not rejected.');
@@ -400,11 +465,12 @@ class SalesOrderService
         }
 
         DB::transaction(function () use ($item, $reason, $rejectedBy) {
-            $item->rejection_status = RejectionStatus::REJECTED;
-            $item->rejection_reason = $reason;
-            $item->rejected_by = $rejectedBy->employee_id;
-            $item->rejected_at = now();
-            $item->save();
+            $this->applyRejection($item, $reason, $rejectedBy);
+
+            // Dependent free demand dies with the parent's remaining demand.
+            foreach ($this->entitlements->closableFreeLines($item) as $free) {
+                $this->applyRejection($free, SalesOrderRejectionReason::systemDefault(), $rejectedBy);
+            }
 
             $this->refreshOrderStatus($item->salesOrder);
 
@@ -420,6 +486,21 @@ class SalesOrderService
         });
 
         return $item->fresh();
+    }
+
+    /**
+     * Write one rejection — the ONLY place that touches the rejection audit
+     * columns, so a user rejection and an automatic system closure are
+     * recorded identically.
+     */
+    private function applyRejection(SalesOrderItem $item, SalesOrderRejectionReason $reason, EmployeeMaster $rejectedBy): void
+    {
+        $item->rejection_status = RejectionStatus::REJECTED;
+        $item->rejection_reason_id = $reason->reason_id;
+        $item->rejection_reason = $reason->reason_name;
+        $item->rejected_by = $rejectedBy->employee_id;
+        $item->rejected_at = now();
+        $item->save();
     }
 
     /** Recompute header status from item rejection/delivery state. */
@@ -499,6 +580,149 @@ class SalesOrderService
         }
 
         return [$supplying, $source, $soldTo];
+    }
+
+    /**
+     * VAN one-cycle status (READ-ONLY, no locks): null when a new VAN cycle may
+     * start, otherwise the blocking documents + the finance numbers.
+     *
+     * "Unfinished" is derived from EXISTING states only — no new status is
+     * invented, and the derivation is the same `SalesLifecycleService` analysis
+     * the orders screen uses (one source of truth):
+     *
+     *   - open demand (confirmed, not yet allocated)            → block
+     *   - released allocation awaiting re-allocation             → block
+     *   - allocated delivery not yet dispatched                  → block
+     *   - dispatched quantity awaiting its POD outcome           → block
+     *   - POD-accepted quantity whose invoice is not generated    → block
+     *   - positive Phase 8 NET exposure                          → block
+     *       (outstanding − available credit, so a fully settled invoice or
+     *        sufficient customer credit never blocks)
+     *
+     * Terminal history never blocks: a COMPLETELY_REJECTED order with nothing
+     * left to process, or a cycle whose outcomes are all recorded and whose
+     * invoice is settled, classify as COMPLETED. DRAFT orders are ignored (not
+     * demand). A POD difference that has moved into the implemented Phase 9
+     * transit/custody workflow manufactures no VAN stock and is NOT a cycle
+     * step: it is parallel accountability for the delivering employee
+     * (`SalesLifecycleService::unfinishedOperationalReasons`).
+     *
+     * The company scope mirrors the finance exposure rule (customers are global
+     * but the cycle belongs to the trading company).
+     *
+     * @return array{
+     *     customer_id: string,
+     *     message: string,
+     *     blocking: array<int, array{sales_order_no: string, order_status: string, reasons: array<int, string>}>,
+     *     exposure: array{outstanding: string, available_credit: string, net_exposure: string}
+     * }|null
+     */
+    public function vanCycleStatus(string $soldToCustomerId, string $companyId, ?string $ignoreOrderNo = null, string $currency = 'NGN'): ?array
+    {
+        $customer = CustomerMaster::where('customer_id', $soldToCustomerId)->first();
+
+        // VAN-only: an ordinary Secondary (or any other customer type) is
+        // never restricted to one unresolved cycle.
+        if ($customer === null || $customer->customer_type !== CustomerType::VAN) {
+            return null;
+        }
+
+        $orders = SalesOrder::query()
+            ->where('sold_to_customer_id', $customer->customer_id)
+            ->where('company_id', $companyId)
+            ->where('order_status', '!=', OrderStatus::DRAFT->value)
+            ->when($ignoreOrderNo !== null, fn ($q) => $q->where('sales_order_no', '!=', $ignoreOrderNo))
+            ->orderBy('sales_order_no')
+            ->get();
+
+        $analysis = $this->lifecycle->classifyOrders($orders);
+
+        $blocking = [];
+
+        foreach ($orders as $order) {
+            $orderAnalysis = $analysis[$order->sales_order_no] ?? null;
+
+            if ($orderAnalysis === null) {
+                continue;
+            }
+
+            $reasons = $this->lifecycle->unfinishedOperationalReasons($orderAnalysis);
+
+            if ($reasons !== []) {
+                $blocking[] = [
+                    'sales_order_no' => $order->sales_order_no,
+                    'order_status' => $order->order_status->value,
+                    'reasons' => $reasons,
+                ];
+            }
+        }
+
+        // Financial condition: the EXISTING Phase 8 net exposure — a settled
+        // invoice or sufficient credit offsets the outstanding amount.
+        $exposure = $this->invoices->exposure($customer->customer_id, $companyId, true);
+        $hasExposure = Decimal::compare($exposure['net_exposure'], '0', 2) > 0;
+
+        if ($blocking === [] && ! $hasExposure) {
+            return null;
+        }
+
+        $message = 'This VAN still has an unfinished transaction. Complete delivery/POD and settle the outstanding balance before starting another order.';
+
+        if ($blocking !== []) {
+            $documents = array_map(
+                fn (array $doc) => $doc['sales_order_no'].' ('.$doc['order_status'].': '.implode(', ', $doc['reasons']).')',
+                array_slice($blocking, 0, 3),
+            );
+
+            $message .= ' Blocking: '.implode('; ', $documents).(count($blocking) > 3 ? ' …' : '').'.';
+        }
+
+        if ($hasExposure) {
+            $message .= sprintf(
+                ' Net exposure: %s %s (invoice outstanding %s, available credit %s).',
+                $exposure['net_exposure'], $currency, $exposure['outstanding'], $exposure['available_credit'],
+            );
+        }
+
+        return [
+            'customer_id' => $customer->customer_id,
+            'message' => $message,
+            'blocking' => $blocking,
+            'exposure' => $exposure,
+        ];
+    }
+
+    /**
+     * Enforce the VAN one-cycle rule for a NEW order. Must run INSIDE the
+     * caller's transaction, as its LAST lock: the VAN's customer_master row is
+     * locked FOR UPDATE (the same serialization point the Phase 8 exposure rule
+     * uses — for a VAN order the sold-to IS the debtor), so two concurrent
+     * attempts to start a new VAN cycle cannot both pass: the loser waits,
+     * re-reads the winner's committed state through a read view created after
+     * the lock, and is refused. Nothing is locked afterwards, so the row stays
+     * a lock-order sink and can never take part in a deadlock cycle.
+     */
+    private function assertVanCycleClear(string $soldToCustomerId, string $companyId, ?string $ignoreOrderNo = null): void
+    {
+        if (! $this->isVanCustomer($soldToCustomerId)) {
+            return;
+        }
+
+        $this->invoices->lockDebtor($soldToCustomerId);
+
+        $block = $this->vanCycleStatus($soldToCustomerId, $companyId, $ignoreOrderNo);
+
+        if ($block !== null) {
+            abort(422, $block['message']);
+        }
+    }
+
+    /** True when the customer is a VAN (the trigger of the one-cycle rule). */
+    private function isVanCustomer(string $customerId): bool
+    {
+        return CustomerMaster::where('customer_id', $customerId)
+            ->where('customer_type', CustomerType::VAN)
+            ->exists();
     }
 
     /**

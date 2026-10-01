@@ -135,6 +135,13 @@ CREATE TABLE customer_master (
 
     contact_person VARCHAR(255) NULL,
     phone_number VARCHAR(50) NULL,
+
+    /* Canonical form of phone_number (e.g. +2348012345678), derived
+       server-side at registration. NULL = no normalizable number given
+       (legacy/admin rows). UNIQUE = DB-level backstop against duplicate
+       customer creation on an equivalent phone number. */
+    phone_canonical VARCHAR(32) NULL,
+
     email_address VARCHAR(255) NULL,
 
     gps_latitude DECIMAL(10,7) NULL,
@@ -157,6 +164,10 @@ CREATE TABLE customer_master (
         ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (customer_id),
+
+    UNIQUE KEY uq_cm_phone_canonical (
+        phone_canonical
+    ),
 
     KEY idx_cm_parent (
         parent_customer_id
@@ -322,21 +333,23 @@ CREATE TABLE customer_fjp (
 
     preferred_week TINYINT UNSIGNED NULL,
 
-    preferred_day ENUM(
-        'MONDAY',
-        'TUESDAY',
-        'WEDNESDAY',
-        'THURSDAY',
-        'FRIDAY',
-        'SATURDAY',
-        'SUNDAY'
-    ) NOT NULL,
+    /* Compact numeric weekday, same index as JS Date#getDay() and Carbon
+       dayOfWeek: 0 = Sunday … 6 = Saturday. The rotation week lives in
+       preferred_week (NULL = every week); combined strings such as
+       'W1-Mon' are presentation only and are NEVER stored. */
+    preferred_day TINYINT UNSIGNED NOT NULL,
 
     active BOOLEAN NOT NULL DEFAULT TRUE,
 
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (fjp_id),
+
+    KEY idx_fjp_plan (
+        company_id,
+        employee_id,
+        preferred_day
+    ),
 
     KEY idx_fjp_employee (
         employee_id
@@ -816,8 +829,38 @@ CREATE TABLE sales_order (
 
 
 /* ============================================================
-   21. SALES ORDER ITEM
+   20b. SALES ORDER REJECTION REASON (controlled lookup)
+
+   Rejection reasons are master data, never free text. Users may only
+   choose rows with user_selectable = TRUE; reason_id 0 (SYSTEM_DEFAULT)
+   is application automation (closing dependent DEAL/free demand whose
+   parent paid demand was terminally rejected) and is never offered in a
+   user dropdown.
    ============================================================ */
+
+CREATE TABLE sales_order_rejection_reason (
+    reason_id TINYINT UNSIGNED NOT NULL,
+
+    reason_code VARCHAR(50) NOT NULL,
+    reason_name VARCHAR(100) NOT NULL,
+
+    user_selectable BOOLEAN NOT NULL DEFAULT TRUE,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (reason_id),
+
+    UNIQUE KEY uq_sorr_code (reason_code)
+) ENGINE=InnoDB;
+
+INSERT INTO sales_order_rejection_reason
+    (reason_id, reason_code, reason_name, user_selectable, active)
+VALUES
+    (0, 'SYSTEM_DEFAULT', 'System Default', FALSE, TRUE),
+    (1, 'CUSTOMER_REQUEST', 'Customer Request', TRUE, TRUE),
+    (2, 'UNAVAILABLE_STOCK', 'Unavailable Stock', TRUE, TRUE);
+
 
 CREATE TABLE sales_order_item (
     sales_order_no VARCHAR(50) NOT NULL,
@@ -857,7 +900,12 @@ CREATE TABLE sales_order_item (
         'REJECTED'
     ) NOT NULL DEFAULT 'NONE',
 
+    /* Legacy/audit free text (kept for history); the controlled reason is
+       rejection_reason_id. New user actions always set both. */
     rejection_reason VARCHAR(255) NULL,
+
+    rejection_reason_id TINYINT UNSIGNED NULL,
+
     rejected_by VARCHAR(50) NULL,
     rejected_at DATETIME NULL,
 
@@ -898,6 +946,10 @@ CREATE TABLE sales_order_item (
     CONSTRAINT fk_soi_rejected_by
         FOREIGN KEY (rejected_by)
         REFERENCES employee_master(employee_id),
+
+    CONSTRAINT fk_soi_reject_reason
+        FOREIGN KEY (rejection_reason_id)
+        REFERENCES sales_order_rejection_reason(reason_id),
 
     CONSTRAINT fk_soi_parent
         FOREIGN KEY (
@@ -1310,9 +1362,18 @@ CREATE TABLE invoice (
         'PAY_LATER'
     ) NOT NULL DEFAULT 'IMMEDIATE',
 
+    /* Unguessable public read-only token for the customer invoice page and
+       QR code (base64url of 32 random bytes). NULL until first shared;
+       sequential ids are never used for public access. */
+    public_token CHAR(43) NULL,
+
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (invoice_no),
+
+    UNIQUE KEY uq_invoice_public_token (
+        public_token
+    ),
 
     UNIQUE KEY uq_invoice_so (
         sales_order_no
@@ -1409,11 +1470,18 @@ CREATE TABLE payment (
 
     payment_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    /* Legacy values (CASH/TRANSFER/POS/OTHER) predate the field-collection
+       ruling: the customer settles at the PRIMARY, never with the sales
+       employee, so new field records use the *_AT_PRIMARY /
+       BANK_TRANSFER_TO_PRIMARY values. */
     payment_method ENUM(
         'CASH',
         'TRANSFER',
         'POS',
-        'OTHER'
+        'OTHER',
+        'BANK_TRANSFER_TO_PRIMARY',
+        'POS_AT_PRIMARY',
+        'CASH_AT_PRIMARY'
     ) NOT NULL,
 
     amount DECIMAL(18,2) NOT NULL,
@@ -1471,6 +1539,54 @@ CREATE TABLE payment_allocation (
     CONSTRAINT fk_pa_invoice
         FOREIGN KEY (invoice_no)
         REFERENCES invoice(invoice_no)
+
+) ENGINE=InnoDB;
+
+
+/* ============================================================
+   31b. PAYMENT EVIDENCE (proof of settlement at the Primary)
+
+   The sales employee verifies the customer's settlement at the Primary
+   office and captures photographic proof. Evidence is an AUDIT artefact:
+   it never participates in money math. GPS coordinates are stored as
+   structured data — watermark pixels are never authoritative.
+   ============================================================ */
+
+CREATE TABLE payment_evidence (
+    evidence_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    payment_id BIGINT UNSIGNED NOT NULL,
+
+    stored_path VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    byte_size INT UNSIGNED NOT NULL,
+
+    gps_latitude DECIMAL(10,7) NULL,
+    gps_longitude DECIMAL(10,7) NULL,
+    gps_accuracy DECIMAL(10,2) NULL,
+
+    /* Device-claimed capture time (client) + watermark context text. */
+    captured_at DATETIME NULL,
+    watermark_text VARCHAR(255) NULL,
+
+    uploaded_by VARCHAR(50) NULL,
+
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (evidence_id),
+
+    KEY idx_pe_payment (
+        payment_id
+    ),
+
+    CONSTRAINT fk_pe_payment
+        FOREIGN KEY (payment_id)
+        REFERENCES payment(payment_id),
+
+    CONSTRAINT fk_pe_employee
+        FOREIGN KEY (uploaded_by)
+        REFERENCES employee_master(employee_id)
 
 ) ENGINE=InnoDB;
 

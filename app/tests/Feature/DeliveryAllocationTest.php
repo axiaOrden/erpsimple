@@ -31,11 +31,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Concerns\ProvidesRejectionReasons;
 use Tests\TestCase;
 
 class DeliveryAllocationTest extends TestCase
 {
     use DatabaseTransactions;
+    use ProvidesRejectionReasons;
 
     private CompanyMaster $company;
 
@@ -260,16 +262,35 @@ class DeliveryAllocationTest extends TestCase
         $order = $this->confirmedDealOrder('10', 'CTN');
         $free = $order->items->first(fn ($i) => (bool) $i->is_free_item);
 
+        // A free line is DEPENDENT fulfilment: on its own it has earned
+        // nothing, so it cannot be allocated and no reward stock is touched.
+        try {
+            $this->deliveries->createAndAllocate($order, $this->employee, collect([
+                ['sales_order_item_no' => $free->item_no, 'qty' => '1', 'unit' => 'CTN'],
+            ]));
+            $this->fail('A free line must never be allocatable without its paid parent line.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+            $this->assertStringContainsString('deal entitlement', $e->getMessage());
+        }
+
+        $b = $this->inventoryAt($this->primary, $reward);
+        $this->assertSame('48.000', (string) $b->unrestricted_qty, 'No free stock is allocated on an unearned free line.');
+        $this->assertSame('0.000', (string) $b->restricted_qty);
+
+        // With the paid parent line allocated, the free line still touches
+        // ONLY its own (reward) product stock — never the parent's.
         $result = $this->deliveries->createAndAllocate($order, $this->employee, collect([
+            ['sales_order_item_no' => 1, 'qty' => '10', 'unit' => 'CTN'],
             ['sales_order_item_no' => $free->item_no, 'qty' => '1', 'unit' => 'CTN'],
         ]));
 
-        $this->assertSame(1, $result['delivery']->items->count());
+        $this->assertSame(2, $result['delivery']->items->count());
 
         $a = $this->inventoryAt();
         $b = $this->inventoryAt($this->primary, $reward);
-        $this->assertSame('240.000', (string) $a->unrestricted_qty, 'Parent stock untouched — free line is not "allocated with its parent".');
-        $this->assertSame('0.000', (string) $a->restricted_qty);
+        $this->assertSame('0.000', (string) $a->unrestricted_qty, 'Parent: 240 − 240 (its own line only).');
+        $this->assertSame('240.000', (string) $a->restricted_qty);
         $this->assertSame('24.000', (string) $b->unrestricted_qty);
         $this->assertSame('24.000', (string) $b->restricted_qty);
     }
@@ -528,7 +549,7 @@ class DeliveryAllocationTest extends TestCase
         $order = $this->confirmedOrder('100');
         $item = $order->items->first();
 
-        $this->orders->rejectItem($item, 'Customer cancelled', $this->employee);
+        $this->orders->rejectItem($item, $this->reason(), $this->employee);
 
         $this->expectException(HttpException::class);
 
@@ -543,7 +564,7 @@ class DeliveryAllocationTest extends TestCase
 
         $this->deliveries->createAndAllocate($order, $this->employee, $this->lines('10', 'PCS'));
 
-        $this->orders->rejectItem($item, 'Cancel the remainder', $this->employee);
+        $this->orders->rejectItem($item, $this->reason(), $this->employee);
 
         // Existing 10 PCS allocation stays restricted and valid.
         $inv = $this->inventoryAt();

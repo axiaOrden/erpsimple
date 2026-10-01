@@ -38,7 +38,7 @@
         <div class="m-card p-8 text-center">
             <p class="font-medium text-on-surface">No journey plans yet</p>
             <p class="text-sm text-on-surface-variant mt-1">
-                A plan binds one employee to one customer with a preferred weekday (and optional week of month).
+                A plan binds one employee to one customer with a preferred weekday in the continuous 4-week rotation.
             </p>
         </div>
     @else
@@ -50,9 +50,10 @@
                             {{ $plan->customer->business_name }}
                             <span class="text-xs text-on-surface-variant">· {{ $plan->customer->customer_type->value }}</span>
                         </p>
-                        <p class="text-xs text-on-surface-variant">
-                            {{ $plan->employee->employee_name }} ({{ $plan->employee_id }})
-                            · {{ $plan->preferred_week ? 'Rotation week '.$plan->preferred_week.', ' : 'Every week, ' }}{{ ucfirst(strtolower($plan->preferred_day)) }}
+                        <p class="flex flex-wrap items-center gap-1 text-xs text-on-surface-variant">
+                            <span>{{ $plan->employee->employee_name }} ({{ $plan->employee_id }})</span>
+                            <span aria-hidden="true">·</span>
+                            <x-fjp-chip :week="$plan->preferred_week" :day="$plan->preferred_day" />
                         </p>
                     </div>
                     <span class="m-chip shrink-0 {{ $plan->active ? 'm-chip-active' : 'm-chip-error' }}">

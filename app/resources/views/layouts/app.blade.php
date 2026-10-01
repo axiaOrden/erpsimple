@@ -73,7 +73,7 @@
 
     {{-- Bottom navigation (mobile) --}}
     <nav class="fixed bottom-0 inset-x-0 z-30 bg-surface-container-high border-t border-outline-variant pb-[env(safe-area-inset-bottom)] md:hidden">
-        <div class="grid grid-cols-4">
+        <div class="grid grid-cols-5">
             <x-nav-links variant="bottom" />
         </div>
         <div class="h-1 flex justify-center">
@@ -83,7 +83,7 @@
 </div>
 
 {{-- Network/sync state banner (hidden by default; Alpine toggles it) --}}
-<div x-data x-show="$store.net.banner" x-transition class="fixed bottom-16 md:bottom-4 inset-x-4 z-40">
+<div x-data x-cloak x-show="$store.net.banner" x-transition class="fixed bottom-16 md:bottom-4 inset-x-4 z-40">
     <div class="m-card px-4 py-3 text-sm shadow-m3" :class="$store.net.bannerClass" x-text="$store.net.bannerText"></div>
 </div>
 

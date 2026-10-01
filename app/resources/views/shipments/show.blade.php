@@ -87,7 +87,7 @@
                     @foreach ($delivery->items as $item)
                         <p class="text-xs text-on-surface-variant pl-3">
                             {{ $item->product->product_description ?? $item->product_id }}
-                            — {{ $item->allocated_qty }} {{ $item->delivery_unit }}
+                            — {{ \App\Services\Decimal::trimZeros((string) $item->allocated_qty) }} {{ $item->delivery_unit }}
                             @if ($item->is_free_item) · FREE @endif
                         </p>
                     @endforeach

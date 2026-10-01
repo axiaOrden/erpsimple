@@ -7,14 +7,19 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\FieldController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\FjpController;
+use App\Http\Controllers\GeoController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\PaymentRecordController;
 use App\Http\Controllers\PodController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\SalesOrderController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\SecondaryCustomerController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\TransitController;
 use App\Http\Controllers\VisitController;
@@ -24,6 +29,20 @@ Route::get('/', fn () => redirect()->route('dashboard'));
 
 // Offline fallback for the service worker (public on purpose).
 Route::get('/offline', fn () => view('offline'))->name('offline');
+
+/*
+ | Public read-only customer invoice.
+ |
+ | Primary/Secondary customers have no application accounts. Access is
+ | granted ONLY by an unguessable random token (never a sequential id) and
+ | the screen is read-only: no POD, payment or ERP operation is reachable.
+ */
+Route::get('/invoice/public/{token}', [PublicInvoiceController::class, 'show'])->name('invoice.public');
+Route::get('/invoice/public/{token}/image.jpg', [PublicInvoiceController::class, 'image'])->name('invoice.public.image');
+
+// Proof of payment for ONE payment of THIS invoice (read-only, token-scoped).
+Route::get('/invoice/public/{token}/payments/{payment}/evidence/{evidence}', [PublicInvoiceController::class, 'evidence'])
+    ->name('invoice.public.evidence');
 
 // Login/password routes manage their own guest middleware.
 require __DIR__.'/auth.php';
@@ -85,6 +104,27 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::patch('/users/{user}', [AppUserController::class, 'update'])->name('users.update');
     Route::patch('/users/{user}/deactivate', [AppUserController::class, 'deactivate'])->name('users.deactivate');
     Route::patch('/users/{user}/activate', [AppUserController::class, 'activate'])->name('users.activate');
+
+    /*
+     | ---- Field workspace: Primary / Secondary / More ----
+     |
+     | Context switches of the SAME field application (persistent bottom
+     | navigation on mobile, navigation rail on desktop) — not separate ERP
+     | modules. All four screens are scoped to the employee's assignments.
+     */
+    Route::get('/primary', [FieldController::class, 'primary'])->name('primary.index');
+    Route::get('/secondary', [FieldController::class, 'secondary'])->name('secondary.index');
+    Route::get('/secondary/create', [SecondaryCustomerController::class, 'create'])->name('secondary.create');
+    Route::post('/secondary', [SecondaryCustomerController::class, 'store'])->name('secondary.store');
+    Route::get('/more', [FieldController::class, 'more'])->name('more.index');
+
+    // Reverse geocoding (address SUGGESTION only; coordinates stay device-captured)
+    Route::get('/geo/reverse', [GeoController::class, 'reverse'])->name('geo.reverse');
+
+    // ---- Field settlement recording (customer pays the PRIMARY, not the employee) ----
+    Route::get('/payments/record/{invoice}', [PaymentRecordController::class, 'create'])->name('payments.record.create');
+    Route::post('/payments/record/{invoice}', [PaymentRecordController::class, 'store'])->name('payments.record.store');
+    Route::get('/payments/{payment}/evidence/{evidence}', [PaymentRecordController::class, 'evidence'])->name('payments.evidence');
 
     // ---- Field sales: visits & attendance (Phase 3) ----
     Route::get('/visits', [VisitController::class, 'today'])->name('visits.today');

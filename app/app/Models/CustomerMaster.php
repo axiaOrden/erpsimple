@@ -25,6 +25,7 @@ class CustomerMaster extends Model
         'parent_customer_id',
         'contact_person',
         'phone_number',
+        'phone_canonical',
         'email_address',
         'gps_latitude',
         'gps_longitude',

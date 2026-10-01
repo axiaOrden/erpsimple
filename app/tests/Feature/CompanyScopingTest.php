@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppUser;
 use App\Models\CompanyMaster;
+use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
 use App\Models\ProductMaster;
@@ -37,12 +38,40 @@ class CompanyScopingTest extends TestCase
             'company_id' => $this->companyA->company_id,
         ]);
 
+        $otherEmployee = EmployeeMaster::factory()->create(['company_id' => $this->companyA->company_id]);
+
         $mine = CustomerMaster::factory()->forEmployee($this->employeeA)->create();
-        CustomerMaster::factory()->forEmployee(null)->create();
+        $theirs = CustomerMaster::factory()->forEmployee($otherEmployee)->create();
+
+        // Both are on TODAY's journey plan — only the assigned one may surface.
+        // Numeric weekday index (0 = Sunday … 6 = Saturday).
+        $today = (int) now()->dayOfWeek;
+
+        CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'employee_id' => $this->employeeA->employee_id,
+            'customer_id' => $mine->customer_id,
+            'preferred_day' => $today,
+            'active' => true,
+        ]);
+        CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'employee_id' => $otherEmployee->employee_id,
+            'customer_id' => $theirs->customer_id,
+            'preferred_day' => $today,
+            'active' => true,
+        ]);
 
         $this->actingAs($user)->get('/dashboard')
             ->assertOk()
-            ->assertSee($mine->business_name);
+            ->assertSee($mine->business_name)
+            ->assertDontSee($theirs->business_name);
+
+        // The field directory (Secondary tab) is scoped the same way.
+        $this->actingAs($user)->get(route('secondary.index'))
+            ->assertOk()
+            ->assertSee($mine->business_name)
+            ->assertDontSee($theirs->business_name);
     }
 
     public function test_company_admin_dashboard_is_scoped_to_own_company(): void

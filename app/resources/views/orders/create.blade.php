@@ -14,6 +14,25 @@
           class="space-y-4 max-w-2xl">
         @csrf
 
+        {{-- VAN one-cycle rule: informational only — the server refuses the
+             order itself; this explains why and links the blocking document(s). --}}
+        @if ($vanBlock !== null || session('van_block'))
+            <div class="m-card p-3 border-l-4 border-l-error space-y-1">
+                <p class="text-sm font-semibold">This VAN cannot start another order yet</p>
+                <p class="text-sm text-on-surface-variant">{{ session('van_block') ?? $vanBlock['message'] }}</p>
+                @if ($vanBlock !== null && count($vanBlock['blocking']) > 0)
+                    <ul class="text-sm space-y-1 pt-1">
+                        @foreach ($vanBlock['blocking'] as $doc)
+                            <li class="flex flex-wrap gap-x-2">
+                                <a class="underline font-medium" href="{{ route('orders.show', $doc['sales_order_no']) }}">{{ $doc['sales_order_no'] }}</a>
+                                <span class="text-on-surface-variant">{{ $doc['order_status'] }} — {{ implode('; ', $doc['reasons']) }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        @endif
+
         <div class="m-card p-4 space-y-3">
             <h2 class="text-base font-semibold">1 · Customer & supply</h2>
 
@@ -114,20 +133,24 @@
                     </select>
 
                     <div class="grid grid-cols-2 gap-2">
-                        <div>
+                        <div class="min-w-0">
                             <label class="block text-xs font-medium text-on-surface-variant mb-1">Quantity</label>
-                            <input type="number" step="0.001" min="0.001" x-model.number="line.qty"
+                            <input type="number" step="0.001" min="0.001" inputmode="decimal" x-model.number="line.qty"
                                    @input="onQtyChange()"
-                                   class="w-full rounded-m border-outline-variant bg-surface" required>
+                                   class="w-full min-w-0 rounded-m border-outline-variant bg-surface" required>
                         </div>
-                        <div>
-                            <label class="block text-xs font-medium text-on-surface-variant mb-1">Unit</label>
+                        <div class="min-w-0">
+                            <label class="block text-xs font-medium text-on-surface-variant mb-1">Unit · base unit pre-selected</label>
                             <select x-model="line.unit" @change="onQtyChange()"
-                                    class="w-full rounded-m border-outline-variant bg-surface">
+                                    class="w-full min-w-0 rounded-m border-outline-variant bg-surface">
+                                {{-- The base unit plus only the alternatives this product actually maintains. --}}
                                 <template x-for="u in unitsFor(line)" :key="u">
                                     <option :value="u" x-text="u"></option>
                                 </template>
                             </select>
+                            <p class="mt-1 text-[11px] text-on-surface-variant" x-show="line.product_id && unitsFor(line).length === 1">
+                                No alternative unit is maintained for this product.
+                            </p>
                         </div>
                     </div>
 

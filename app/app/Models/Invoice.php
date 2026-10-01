@@ -41,6 +41,7 @@ class Invoice extends Model
         'settled_amount',
         'payment_status',
         'payment_term',
+        'public_token',
     ];
 
     protected function casts(): array
@@ -104,5 +105,11 @@ class Invoice extends Model
     public function creditAllocations()
     {
         return $this->hasMany(CreditAllocation::class, 'invoice_no', 'invoice_no');
+    }
+
+    /** Total applied against this invoice (payments + credits). */
+    public function appliedAmount(): string
+    {
+        return Decimal::add((string) $this->settled_amount, (string) $this->credit_amount, 2);
     }
 }

@@ -20,7 +20,7 @@
                         <p class="text-xs text-on-surface-variant">
                             confirmed {{ $confirmation->confirmed_qty }} {{ $confirmation->confirmed_unit }}
                             @if ((string) $confirmation->difference_qty !== '0.000')
-                                · diff {{ $confirmation->difference_qty }} {{ $confirmation->difference_unit }} ({{ $confirmation->difference_reason->value }})
+                                · diff {{ \App\Services\Decimal::trimZeros((string) $confirmation->difference_qty) }} {{ $confirmation->difference_unit }} ({{ $confirmation->difference_reason->value }})
                             @endif
                             · by {{ $employee?->employee_name ?? $confirmation->confirmed_by }}
                         </p>

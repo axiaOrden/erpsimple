@@ -18,15 +18,18 @@ use App\Models\PriceConditionItem;
 use App\Models\ProductMaster;
 use App\Models\ProductUnitConversion;
 use App\Models\SalesOrder;
+use App\Models\SalesOrderRejectionReason;
 use App\Services\SalesOrderService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Concerns\ProvidesRejectionReasons;
 use Tests\TestCase;
 
 class SalesOrderTest extends TestCase
 {
     use DatabaseTransactions;
+    use ProvidesRejectionReasons;
 
     private CompanyMaster $company;
 
@@ -451,7 +454,7 @@ class SalesOrderTest extends TestCase
         $this->service->confirm($order);
 
         $item = $order->items()->first();
-        $rejected = $this->service->rejectItem($item, 'Customer cancelled remainder', $this->employee);
+        $rejected = $this->service->rejectItem($item, $this->reason(), $this->employee);
 
         $this->assertSame('30.000', (string) $rejected->order_qty, 'Original demand must be preserved.');
         $this->assertSame('REJECTED', $rejected->rejection_status->value);
@@ -475,7 +478,7 @@ class SalesOrderTest extends TestCase
         $this->service->confirm($order);
 
         $item = $order->items()->first();
-        $this->service->rejectItem($item, 'Short delivery remainder', $this->employee);
+        $this->service->rejectItem($item, $this->reason(SalesOrderRejectionReason::CODE_UNAVAILABLE_STOCK), $this->employee);
 
         $order->refresh();
         $this->assertSame('COMPLETELY_REJECTED', $order->order_status->value);
@@ -490,10 +493,10 @@ class SalesOrderTest extends TestCase
 
         $this->service->confirm($order);
         $item = $order->items()->first();
-        $this->service->rejectItem($item, 'first', $this->employee);
+        $this->service->rejectItem($item, $this->reason(), $this->employee);
 
         $this->expectException(HttpException::class);
-        $this->service->rejectItem($item, 'second', $this->employee);
+        $this->service->rejectItem($item, $this->reason(), $this->employee);
     }
 
     // ---- HTTP authorization --------------------------------------------------------

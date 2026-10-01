@@ -16,6 +16,8 @@ use App\Models\ProductMaster;
 use App\Models\ProductUnitConversion;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderItem;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -92,14 +94,9 @@ class InvoiceService
                 continue; // rejected remainder = final disposition
             }
 
-            $shippedRows = DeliveryItem::where('sales_order_no', $item->sales_order_no)
-                ->where('sales_order_item_no', $item->item_no)
-                ->whereHas('delivery', fn ($q) => $q->whereIn('delivery_status', [
-                    DeliveryStatus::SHIPPED->value,
-                    DeliveryStatus::DELIVERED->value,
-                    DeliveryStatus::PARTIALLY_DELIVERED->value,
-                ]))
-                ->get();
+            // Traceability-validated shipped rows only (a row carrying another
+            // product is malformed history and is not a delivery of this line).
+            $shippedRows = $this->shippedRows($item);
 
             // Unshipped (still open) demand is NOT terminal.
             $orderedBasic = app(ProductUnitService::class)->toBasicById(
@@ -272,6 +269,21 @@ class InvoiceService
                     'sales_order_item_no' => $item->item_no,
                 ];
 
+                // DEAL/free lines are TRANSPARENCY ONLY: the accepted free
+                // quantity is shown, but never at a price. This is structural,
+                // so a malformed/legacy free line carrying the parent's price
+                // (or its discount/tax) can never bill the parent's value — and
+                // a FREE-only delivery can never produce a monetary invoice.
+                if ($item->is_free_item) {
+                    $last = array_key_last($lines);
+                    $lines[$last]['unit_price'] = '0.00';
+                    $lines[$last]['discount_amount'] = '0.00';
+                    $lines[$last]['tax_amount'] = '0.00';
+                    $lines[$last]['subtotal_amount'] = '0.00';
+
+                    continue;
+                }
+
                 $gross = Decimal::add($gross, $subtotal, 2);
                 $discountTotal = Decimal::add($discountTotal, $discount, 2);
                 $taxTotal = Decimal::add($taxTotal, $tax, 2);
@@ -315,53 +327,83 @@ class InvoiceService
     }
 
     /**
-     * Invoiceable basic quantity for an SO item (§3 REV 2):
-     * CONFIRMED → shipped basic; PARTIAL → confirmed basic; REJECTED → 0.
+     * Invoiceable basic quantity for an SO item — the AUTHORITATIVE POD
+     * accepted quantity, traced
+     *
+     *   SO item → Delivery item → Shipment → POD confirmed qty → invoice item
+     *
+     * and never derived from the ordered quantity, the SO completion status,
+     * the rejection status or the order total.
+     *
+     * Per shipped delivery row:
+     *  - a row whose recorded product differs from the SO item's product is a
+     *    broken traceability link and contributes NOTHING (fail closed — the
+     *    parent's value is never billed for goods that are not its own);
+     *  - no POD outcome yet → nothing is billable from that row;
+     *  - POD REJECTED → 0; POD PARTIAL/CONFIRMED → the confirmed quantity in
+     *    the confirmation's OWN unit (30 PCS confirmed on a CTN delivery is
+     *    30 PCS, never 30 CTN), clamped to what that row actually shipped.
      */
     public function invoiceableBasicQty(SalesOrderItem $item): string
     {
         $units = app(ProductUnitService::class);
         $sum = '0.000';
 
-        $rows = DeliveryItem::where('sales_order_no', $item->sales_order_no)
+        foreach ($this->shippedRows($item) as $row) {
+            $outcome = DeliveryConfirmation::where('delivery_no', $row->delivery_no)
+                ->where('delivery_item_no', $row->item_no)
+                ->first();
+
+            if ($outcome === null || $outcome->confirmation_status === ConfirmationStatus::REJECTED) {
+                continue;
+            }
+
+            try {
+                $accepted = $units->toBasicById(
+                    (string) $row->product_id,
+                    (string) $outcome->confirmed_qty,
+                    (string) $outcome->confirmed_unit,
+                );
+
+                // Never bill more than the row physically shipped (defensive:
+                // an over-delivery is already rejected by POD, but historical
+                // rows must not be able to inflate an invoice either).
+                $shipped = $units->toBasicById(
+                    (string) $row->product_id, (string) $row->allocated_qty, (string) $row->delivery_unit,
+                );
+
+                if (Decimal::compare($accepted, $shipped, 3) > 0) {
+                    $accepted = $shipped;
+                }
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            $sum = Decimal::add($sum, $accepted, 3);
+        }
+
+        return $sum;
+    }
+
+    /**
+     * Shipped delivery rows of an SO item, with the traceability link
+     * validated: a row whose product is not the SO item's product is not a
+     * delivery of that line (malformed history) and is skipped everywhere the
+     * invoice boundary is decided.
+     *
+     * @return Collection<int, DeliveryItem>
+     */
+    private function shippedRows(SalesOrderItem $item)
+    {
+        return DeliveryItem::where('sales_order_no', $item->sales_order_no)
             ->where('sales_order_item_no', $item->item_no)
+            ->where('product_id', $item->product_id)
             ->whereHas('delivery', fn ($q) => $q->whereIn('delivery_status', [
                 DeliveryStatus::SHIPPED->value,
                 DeliveryStatus::DELIVERED->value,
                 DeliveryStatus::PARTIALLY_DELIVERED->value,
             ]))
             ->get();
-
-        foreach ($rows as $row) {
-            $outcome = DeliveryConfirmation::where('delivery_no', $row->delivery_no)
-                ->where('delivery_item_no', $row->item_no)
-                ->first();
-
-            if ($outcome === null) {
-                continue;
-            }
-
-            $basis = match ($outcome->confirmation_status) {
-                ConfirmationStatus::CONFIRMED => (string) $row->allocated_qty,
-                ConfirmationStatus::PARTIAL => (string) $outcome->confirmed_qty,
-                ConfirmationStatus::REJECTED => '0',
-            };
-
-            // PARTIAL quantities are expressed in the CONFIRMATION's unit,
-            // which may differ from the delivery's unit (30 PCS confirmed on
-            // a CTN delivery is 30 PCS, never 30 CTN).
-            $basisUnit = $outcome->confirmation_status === ConfirmationStatus::PARTIAL
-                ? (string) $outcome->confirmed_unit
-                : (string) $row->delivery_unit;
-
-            try {
-                $sum = Decimal::add($sum, $units->toBasicById($row->product_id, $basis, $basisUnit), 3);
-            } catch (\InvalidArgumentException) {
-                continue;
-            }
-        }
-
-        return $sum;
     }
 
     /** factor = how many basic units one alternative unit contains. */
@@ -507,5 +549,49 @@ class InvoiceService
                 ),
             ]);
         }
+    }
+
+    /**
+     * Unguessable public read-only token for the CUSTOMER invoice page and its
+     * QR code. Never a sequential id: 32 random bytes, base64url encoded (43
+     * characters). Generated lazily on first share and never rotated silently
+     * (an emailed/printed QR keeps working). Concurrent generations serialize
+     * on the invoice row; the uq_invoice_public_token index is the backstop.
+     */
+    public function publicToken(Invoice $invoice): string
+    {
+        if ($invoice->public_token !== null && $invoice->public_token !== '') {
+            return $invoice->public_token;
+        }
+
+        return DB::transaction(function () use ($invoice) {
+            $locked = Invoice::whereKey($invoice->invoice_no)->lockForUpdate()->firstOrFail();
+
+            if ($locked->public_token !== null && $locked->public_token !== '') {
+                return $locked->public_token;
+            }
+
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                $token = self::newPublicToken();
+                $locked->public_token = $token;
+
+                try {
+                    $locked->save();
+
+                    return $token;
+                } catch (QueryException $e) {
+                    if ((int) ($e->errorInfo[1] ?? 0) !== 1062) {
+                        throw $e;
+                    }
+                }
+            }
+
+            abort(500, 'Could not allocate a public invoice token.');
+        });
+    }
+
+    public static function newPublicToken(): string
+    {
+        return rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
     }
 }

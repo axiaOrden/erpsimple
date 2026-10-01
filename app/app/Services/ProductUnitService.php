@@ -73,6 +73,18 @@ class ProductUnitService
         return $this->format($basicFloat * (float) $conversion->denominator / (float) $conversion->numerator);
     }
 
+    /** Convert a basic-unit quantity into a unit by product id. */
+    public function fromBasicById(string $productId, string $basicQty, string $unit): string
+    {
+        $product = ProductMaster::find($productId);
+
+        if ($product === null) {
+            throw new \InvalidArgumentException("Unknown product '$productId'.");
+        }
+
+        return $this->fromBasic($product, $basicQty, $unit);
+    }
+
     private function format(float $value): string
     {
         return number_format(round($value, 3), 3, '.', '');

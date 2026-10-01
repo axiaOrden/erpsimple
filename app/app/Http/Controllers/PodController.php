@@ -10,6 +10,7 @@ use App\Models\DeliveryConfirmation;
 use App\Models\DeliveryItem;
 use App\Models\EmployeeMaster;
 use App\Models\ProductMaster;
+use App\Services\InvoiceService;
 use App\Services\PodService;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class PodController extends Controller
     public function __construct(
         private readonly PodService $pod,
         private readonly SyncService $sync,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /** POD workspace for one SHIPPED delivery. */
@@ -32,8 +34,20 @@ class PodController extends Controller
 
         $delivery->load(['items.product', 'sourceCustomer', 'salesOrder.soldToCustomer']);
 
+        // Contextual follow-through: the accepted quantity becomes the invoice
+        // (Model A, one per SO) — surface it here instead of sending the
+        // employee to a global finance module. The POD hand-over is the share
+        // moment, so the public token is ensured here (idempotent).
+        $invoice = $delivery->salesOrder?->invoice()->first();
+
+        if ($invoice !== null) {
+            $this->invoices->publicToken($invoice);
+            $invoice->refresh();
+        }
+
         return view('pod.show', [
             'delivery' => $delivery,
+            'invoice' => $invoice,
             'reasons' => collect(DifferenceReason::cases())
                 ->filter(fn ($r) => $r !== DifferenceReason::NONE)
                 ->mapWithKeys(fn ($r) => [$r->value => $r->value === 'SHORT_DELIVERY' ? 'Short delivery' : ucfirst(strtolower(str_replace('_', ' ', $r->value)))]),

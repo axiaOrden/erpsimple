@@ -5,8 +5,14 @@
         {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
     </button>
 
-    <div x-show="open" @click.outside="open = false" x-transition.opacity
-         class="absolute right-0 mt-2 w-72 m-card shadow-m3 p-4 z-50">
+    {{--
+        x-cloak: the popover must not paint before Alpine boots (otherwise it
+        flashes open on every page navigation). max-sm:w-64 keeps the 288px card
+        inside a 360px viewport: it is anchored right-0 to a trigger that is not
+        the last header item, so full width would overhang the left edge.
+    --}}
+    <div x-show="open" x-cloak @click.outside="open = false" x-transition.opacity
+         class="absolute right-0 mt-2 w-72 max-sm:w-64 m-card shadow-m3 p-4 z-50">
         <p class="font-semibold">{{ auth()->user()->name }}</p>
         <p class="text-sm text-on-surface-variant">{{ auth()->user()->email }}</p>
 

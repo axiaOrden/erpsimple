@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppUser;
 use App\Models\CompanyMaster;
+use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
 use App\Models\EmployeeProduct;
@@ -41,22 +42,36 @@ class SalesEmployeeWorkflowTest extends TestCase
 
     public function test_dashboard_exposes_actionable_sales_workflow(): void
     {
+        // The Home is an operational dashboard: the five persistent
+        // destinations, today's plan (contextual customer links) and the
+        // attention panel are all reachable from it.
+        CustomerFjp::create([
+            'company_id' => $this->company->company_id,
+            'employee_id' => $this->employee->employee_id,
+            'customer_id' => $this->secondary->customer_id,
+            'preferred_day' => (int) now()->dayOfWeek,
+            'active' => true,
+        ]);
+
         $this->actingAs($this->seller)
             ->get(route('dashboard'))
-            ->assertSee(route('orders.create'), false)
-            ->assertSee(route('inventory.counts.create'), false)
-            ->assertSee(route('visits.customer', $this->secondary), false);
+            ->assertSee(route('visits.today'), false)
+            ->assertSee(route('orders.index'), false)
+            ->assertSee(route('inventory.index'), false)
+            ->assertSee(route('more.index'), false)
+            ->assertSee(route('visits.customer', $this->secondary), false)
+            ->assertSee('Needs attention');
     }
 
     public function test_assigned_secondary_visit_exposes_count_order_history_and_outstanding_actions(): void
     {
         $this->actingAs($this->seller)
             ->get(route('visits.customer', $this->secondary))
-            ->assertSee('Count inventory')
-            ->assertSee('New order')
+            ->assertSee('Inventory count')
+            ->assertSee('Create new order')
             ->assertSee('Recent purchases')
             ->assertSee('Open orders')
-            ->assertSee('Statement & outstanding', false)
+            ->assertSee('Statement &amp; outstanding', false)
             ->assertSee(route('orders.create', ['customer' => $this->secondary->customer_id]), false);
     }
 

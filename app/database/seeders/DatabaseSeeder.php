@@ -154,7 +154,8 @@ class DatabaseSeeder extends Seeder
     /** FJP demo: every weekday across all four rotation weeks. */
     private function seedDemoFjp(): void
     {
-        foreach (['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as $day) {
+        // Numeric weekday indexes (0 = Sunday … 6 = Saturday): Monday–Friday.
+        foreach ([1, 2, 3, 4, 5] as $day) {
             foreach ([1, 2, 3, 4] as $week) {
                 CustomerFjp::updateOrCreate(
                     [

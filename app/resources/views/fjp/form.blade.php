@@ -56,6 +56,7 @@
                     </select>
                     <p class="text-xs text-on-surface-variant mt-1">
                         Continuous 4-week cycle (1→2→3→4→1…) — not week-of-month.
+                        Stored as a numeric rotation week + weekday (0 = Sunday … 6 = Saturday).
                     </p>
                 </div>
                 <div>
@@ -63,8 +64,8 @@
                     <select id="preferred_day" name="preferred_day"
                             class="mt-1 block w-full rounded-m border-outline-variant bg-surface" required>
                         @foreach ($days as $day)
-                            <option value="{{ $day }}" @selected(old('preferred_day', $plan->preferred_day) === $day)>
-                                {{ ucfirst(strtolower($day)) }}
+                            <option value="{{ $day }}" @selected((int) old('preferred_day', $plan->preferred_day) === $day)>
+                                {{ \App\Enums\Weekday::from($day)->label() }}
                             </option>
                         @endforeach
                     </select>

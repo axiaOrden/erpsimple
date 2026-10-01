@@ -9,14 +9,20 @@ use App\Models\EmployeeMaster;
 use App\Models\EmployeeProduct;
 use App\Models\ProductMaster;
 use App\Models\SalesOrder;
+use App\Models\SalesOrderItem;
+use App\Models\SalesOrderRejectionReason;
 use App\Services\CompanyContext;
+use App\Services\DealEntitlementService;
 use App\Services\DealService;
 use App\Services\Decimal;
 use App\Services\PricingService;
 use App\Services\ProductUnitService;
+use App\Services\SalesLifecycleService;
 use App\Services\SalesOrderService;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\Rule;
 
 /**
  * Sales Order capture (Phase 4). SO = DEMAND ONLY — no inventory effect.
@@ -32,30 +38,125 @@ class SalesOrderController extends Controller
         private readonly ProductUnitService $units,
         private readonly CompanyContext $companyContext,
         private readonly SyncService $sync,
+        private readonly DealEntitlementService $entitlements,
     ) {}
 
-    public function index(Request $request)
+    /**
+     * Order screen: date window (default today → today), search, and the
+     * ONGOING / COMPLETED split DERIVED from authoritative state — no new
+     * database status is invented for the UI.
+     */
+    public function index(Request $request, SalesLifecycleService $lifecycle)
     {
         $user = $request->user();
 
-        $orders = SalesOrder::query()
-            ->forUser($user)
-            ->when($user->isSalesEmployee() && $user->employee_id, fn ($q) => $q->where('sales_employee_id', $user->employee_id))
-            ->with(['soldToCustomer', 'supplyingCustomer'])
-            ->orderByDesc('created_at')
-            ->paginate(20)
-            ->withQueryString();
+        $from = $request->date('from') ?? today();
+        $to = $request->date('to') ?? today();
 
-        return view('orders.index', ['orders' => $orders]);
+        if ($to->lt($from)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $tab = strtoupper((string) $request->query('tab', 'ONGOING'));
+        $tab = in_array($tab, ['ONGOING', 'COMPLETED'], true) ? $tab : 'ONGOING';
+        $search = trim((string) $request->query('q', ''));
+        $perPage = $this->perPage($request);
+
+        // Bounded window: classification is an in-memory derivation, so the
+        // candidate set is capped rather than streamed over an unbounded range.
+        $orders = SalesOrder::query()
+            // Row-level scope: a sales employee sees their own orders only; an
+            // administrator sees their company's; a superadmin's context
+            // company (or every company when no context is set).
+            ->when($user->isSalesEmployee() && $user->employee_id, fn ($q) => $q->where('sales_employee_id', $user->employee_id))
+            ->when(! $user->isSalesEmployee() && ! $user->isSuperadmin(), fn ($q) => $q->where('company_id', $user->company_id))
+            ->when($user->isSuperadmin() && $user->currentCompanyId() !== null, fn ($q) => $q->where('company_id', $user->currentCompanyId()))
+            ->whereDate('order_date', '>=', $from->toDateString())
+            ->whereDate('order_date', '<=', $to->toDateString())
+            ->when($search !== '', fn ($q) => $q->where(function ($w) use ($search) {
+                $w->where('sales_order_no', 'like', '%'.$search.'%')
+                    ->orWhereHas('soldToCustomer', fn ($c) => $c->where('business_name', 'like', '%'.$search.'%'))
+                    ->orWhereHas('supplyingCustomer', fn ($c) => $c->where('business_name', 'like', '%'.$search.'%'));
+            }))
+            ->with(['soldToCustomer', 'supplyingCustomer', 'invoice'])
+            ->orderByDesc('order_date')
+            ->orderByDesc('sales_order_no')
+            ->limit(300)
+            ->get();
+
+        $analysis = $lifecycle->classifyOrders($orders);
+
+        $counts = ['ONGOING' => 0, 'COMPLETED' => 0];
+
+        foreach ($orders as $order) {
+            $state = $analysis[$order->sales_order_no]['state'] ?? 'COMPLETED';
+            $counts[$state]++;
+        }
+
+        $filtered = $orders
+            ->filter(fn (SalesOrder $order) => ($analysis[$order->sales_order_no]['state'] ?? 'COMPLETED') === $tab)
+            ->values();
+
+        $page = max(1, (int) $request->query('page', 1));
+
+        $paginator = new LengthAwarePaginator(
+            $filtered->slice(($page - 1) * $perPage, $perPage)->values(),
+            $filtered->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
+
+        $augmented = $paginator->getCollection()->map(fn (SalesOrder $order) => ['order' => $order, 'analysis' => $analysis[$order->sales_order_no] ?? null]);
+
+        return view('orders.index', [
+            'rows' => $augmented,
+            'paginator' => $paginator,
+            'counts' => $counts,
+            'tab' => $tab,
+            'search' => $search,
+            'from' => $from,
+            'to' => $to,
+            'perPage' => $perPage,
+            'nextPerPage' => min(120, $perPage * 2),
+        ]);
     }
 
-    public function show(Request $request, SalesOrder $order)
+    public function show(Request $request, SalesOrder $order, SalesLifecycleService $lifecycle)
     {
         $this->assertCanView($request->user(), $order);
 
         $order->load(['items.product', 'items.orderUnit', 'soldToCustomer', 'supplyingCustomer', 'sourceCustomer']);
 
-        return view('orders.show', ['order' => $order]);
+        // DEAL/free dependency explanation per free line, so the order screen
+        // shows WHY a free line can (not) be fulfilled on its own.
+        $dependencyNotes = $order->items
+            ->filter(fn (SalesOrderItem $item) => (bool) $item->is_free_item)
+            ->mapWithKeys(function (SalesOrderItem $item) {
+                $context = $this->entitlements->context($item);
+
+                return [$item->item_no => $context !== null ? $this->entitlements->note($context) : null];
+            })
+            ->filter()
+            ->all();
+
+        return view('orders.show', [
+            'order' => $order,
+            'analysis' => $lifecycle->orderAnalysis($order),
+            'invoice' => $order->invoice()->first(),
+            'dependencyNotes' => $dependencyNotes,
+            // Controlled rejection reasons — SYSTEM_DEFAULT (automation) is
+            // never selectable by a user.
+            'rejectionReasons' => SalesOrderRejectionReason::userSelectableOptions(),
+        ]);
+    }
+
+    /** Load-more growth for the order list (per_page doubles, capped). */
+    private function perPage(Request $request): int
+    {
+        $perPage = (int) $request->query('per_page', 20);
+
+        return max(5, min(120, $perPage <= 0 ? 20 : $perPage));
     }
 
     public function create(Request $request)
@@ -66,6 +167,16 @@ class SalesOrderController extends Controller
         $assignedCustomerIds = CustomerEmployee::where('employee_id', $employee->employee_id)
             ->pluck('customer_id');
 
+        // VAN one-cycle rule: INFORMATIONAL here (the enforcement lives in
+        // SalesOrderService, server-side and concurrency-safe) — the screen
+        // explains why a VAN cannot start another order and links the blocking
+        // documents.
+        $selectedCustomerId = $request->string('customer')->toString();
+
+        $vanBlock = $selectedCustomerId !== ''
+            ? $this->orders->vanCycleStatus($selectedCustomerId, $employee->company_id)
+            : null;
+
         return view('orders.create', [
             'assignedCustomers' => CustomerMaster::whereIn('customer_id', $assignedCustomerIds)
                 ->where('active', true)->orderBy('business_name')->get(),
@@ -73,7 +184,8 @@ class SalesOrderController extends Controller
             // (no fixed Primary → Secondary mapping; server-enforced everywhere).
             'primaries' => CustomerMaster::whereIn('customer_id', $this->orders->eligibleSupplyingIds($employee))
                 ->orderBy('business_name')->get(),
-            'selectedCustomerId' => $request->string('customer')->toString(),
+            'selectedCustomerId' => $selectedCustomerId,
+            'vanBlock' => $vanBlock,
         ]);
     }
 
@@ -123,7 +235,12 @@ class SalesOrderController extends Controller
             $productsQuery->whereIn('product_id', $scoped);
         }
 
-        $products = $productsQuery->with('basicUnit')->orderBy('product_description')->get();
+        // The unit picker is authoritative: the product's BASE unit plus any
+        // alternative that carries a MAINTAINED product_unit_conversion row.
+        // A unit is never offered globally (no CTN on products without one).
+        $products = $productsQuery->with(['basicUnit', 'unitConversions'])
+            ->orderBy('product_description')
+            ->get();
 
         $resolution = $this->pricing->resolveMany($products, today(), $soldTo->sales_region);
 
@@ -143,12 +260,32 @@ class SalesOrderController extends Controller
                 'label' => $p->product_description,
                 'sku' => $p->product_sku,
                 'basic_unit' => $p->basic_unit,
+                'alt_units' => $this->maintainedUnits($p),
                 'recommended_price' => $resolution['prices'][$p->product_id]['price'] ?? null,
                 'price_condition_no' => $resolution['prices'][$p->product_id]['condition_price_no'] ?? null,
             ]),
             'price_ambiguous' => array_keys($resolution['ambiguous']),
             'deals' => $deals,
         ]);
+    }
+
+    /**
+     * Units an employee may ORDER in, beyond the product's base unit: only the
+     * alternatives with a maintained `product_unit_conversion` row (non-zero
+     * numerator and denominator). No unit is ever exposed globally.
+     *
+     * @return array<int, string>
+     */
+    private function maintainedUnits(ProductMaster $product): array
+    {
+        return $product->unitConversions
+            ->filter(fn ($conversion) => (float) $conversion->numerator != 0.0 && (float) $conversion->denominator != 0.0)
+            ->pluck('alternative_unit')
+            ->reject(fn (string $unit) => $unit === $product->basic_unit)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
     }
 
     /**
@@ -202,6 +339,21 @@ class SalesOrderController extends Controller
         ]);
 
         $action = $request->input('action', 'draft'); // draft | confirm
+
+        // VAN one-cycle rule: a friendly, informational precheck — the
+        // AUTHORITATIVE, concurrency-safe enforcement is inside the service
+        // (createDraft / confirm), so a race can never slip a second cycle
+        // through even if this precheck is stale.
+        $vanBlock = $this->orders->vanCycleStatus(
+            $validated['sold_to_customer_id'], $employee->company_id,
+        );
+
+        if ($vanBlock !== null) {
+            return redirect()
+                ->route('orders.create', ['customer' => $validated['sold_to_customer_id']])
+                ->withInput()
+                ->with('van_block', $vanBlock['message']);
+        }
 
         $result = $this->orders->createDraft(
             $employee,
@@ -306,7 +458,11 @@ class SalesOrderController extends Controller
     }
 
     /**
-     * Reject a confirmed item (reason required). Original demand is preserved.
+     * Reject a confirmed item. Original demand is preserved.
+     *
+     * The reason is CONTROLLED master data: free text is never accepted, and
+     * the automation-only SYSTEM_DEFAULT reason can never be chosen here (it
+     * is reserved for automatic closure of dependent DEAL/free demand).
      */
     public function rejectItem(Request $request, SalesOrder $order, string $itemNo)
     {
@@ -314,14 +470,24 @@ class SalesOrderController extends Controller
         $employee = $this->employeeOf($request->user());
 
         $validated = $request->validate([
-            'rejection_reason' => ['required', 'string', 'max:255'],
+            'rejection_reason_id' => [
+                'required', 'integer',
+                Rule::exists('sales_order_rejection_reason', 'reason_id')
+                    ->where('user_selectable', true)
+                    ->where('active', true),
+            ],
+        ], [
+            'rejection_reason_id.exists' => 'Choose one of the available rejection reasons.',
         ]);
 
         $item = $order->items()->where('item_no', (int) $itemNo)->firstOrFail();
 
-        $this->orders->rejectItem($item, $validated['rejection_reason'], $employee);
+        $reason = SalesOrderRejectionReason::findOrFail($validated['rejection_reason_id']);
 
-        return back()->with('status', 'Item rejected. Remaining demand will not be newly allocated.');
+        $this->orders->rejectItem($item, $reason, $employee);
+
+        return back()->with('status', 'Item rejected ('.$reason->reason_name
+            .'). Remaining demand will not be newly allocated; any dependent free deal quantity that cannot be earned is closed automatically.');
     }
 
     /**

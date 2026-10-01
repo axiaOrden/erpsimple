@@ -3,6 +3,8 @@ import { netStore } from './net.js';
 import { net } from './net-store.js';
 import { visitQueue } from './visit-queue.js';
 import { orderCaptureComponent } from './order-capture.js';
+import { customerRegistration } from './customer-map.js';
+import { paymentProof } from './payment-proof.js';
 import { registerServiceWorker } from './sw-register.js';
 
 // Network/sync state store shared by the header pill and banners.
@@ -16,6 +18,8 @@ document.addEventListener('alpine:init', () => {
 
     Alpine.data('visitQueue', visitQueue);
     Alpine.data('orderCapture', (existing) => orderCaptureComponent(existing));
+    Alpine.data('customerRegistration', (config) => customerRegistration(config));
+    Alpine.data('paymentProof', (config) => paymentProof(config));
 
     // Reflect queued operations in the header pill at startup.
     net.refreshPending();

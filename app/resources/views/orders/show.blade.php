@@ -82,19 +82,32 @@
                             <span class="text-on-surface-variant">{{ $item->price_override_reason }}</span>
                         @endif
                         @if ($item->isRejected())
-                            <span class="m-chip m-chip-error">REJECTED — {{ $item->rejection_reason }}</span>
+                            <span class="m-chip m-chip-error">REJECTED — {{ $item->rejectionReasonLabel() }}</span>
+                            @if ($item->isSystemRejected())
+                                <span class="m-chip" title="Closed automatically because its paid parent line's remaining demand was rejected">SYSTEM</span>
+                            @endif
                         @endif
+                        @isset($dependencyNotes[$item->item_no])
+                            <span class="text-on-surface-variant">{{ $dependencyNotes[$item->item_no] }}</span>
+                        @endisset
                     </div>
 
                     @if ($order->order_status->value !== 'DRAFT' && ! $item->is_free_item && ! $item->isRejected())
                         <details class="mt-2">
                             <summary class="text-xs text-error font-medium cursor-pointer">Reject remaining demand…</summary>
-                            <form method="POST" action="{{ route('orders.items.reject', [$order, $item->item_no]) }}" class="mt-2 flex gap-2">
+                            <form method="POST" action="{{ route('orders.items.reject', [$order, $item->item_no]) }}" class="mt-2 space-y-2">
                                 @csrf
-                                <input type="text" name="rejection_reason" required maxlength="255"
-                                       placeholder="Reason (required)"
-                                       class="flex-1 rounded-m border-outline-variant bg-surface text-sm">
-                                <button type="submit" onclick="return confirm('Reject the remaining demand of this line? Quantities already allocated to a delivery are not affected.')"
+                                {{-- Controlled reasons only: rejection is never free text, and the
+                                     automation-only SYSTEM_DEFAULT reason is not offered. --}}
+                                <label class="block text-[11px] text-on-surface-variant" for="rejection-reason-{{ $item->item_no }}">Reason</label>
+                                <select id="rejection-reason-{{ $item->item_no }}" name="rejection_reason_id" required
+                                        class="w-full rounded-m border-outline-variant bg-surface text-sm">
+                                    <option value="">Choose reason…</option>
+                                    @foreach ($rejectionReasons as $reason)
+                                        <option value="{{ $reason->reason_id }}">{{ $reason->reason_name }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="submit" onclick="return confirm('Reject the remaining demand of this line? Quantities already allocated to a delivery are not affected, and dependent free deal lines that can no longer be earned are closed automatically.')"
                                         class="h-10 px-4 rounded-full bg-error-container text-on-error-container text-sm font-medium">
                                     Reject
                                 </button>
@@ -111,6 +124,66 @@
             <div class="flex justify-between mt-1"><span class="text-on-surface-variant">Tax</span><span>{{ number_format((float) $order->tax_amount, 2) }}</span></div>
             <div class="flex justify-between mt-2 pt-2 border-t border-outline-variant font-semibold">
                 <span>Net</span><span>{{ number_format((float) $order->net_amount, 2) }} {{ $order->currency }}</span>
+            </div>
+        </div>
+
+        {{-- Document lifecycle: SO → Delivery → Shipment → POD → Invoice → Payment --}}
+        <div class="m-card p-4">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-base font-semibold">Lifecycle</h2>
+                <span class="m-chip {{ $analysis['state'] === 'ONGOING' ? 'm-chip-active' : '' }}">{{ $analysis['state'] }}</span>
+            </div>
+
+            <ol class="mt-3 space-y-2 text-sm">
+                @foreach ($analysis['steps'] as $step)
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full
+                            {{ $step['state'] === 'done' ? 'bg-emerald-600' : ($step['state'] === 'active' ? 'bg-amber-400' : 'bg-outline-variant') }}"
+                              aria-hidden="true"></span>
+                        <span class="min-w-0 flex-1">
+                            <span class="font-medium">{{ $step['label'] }}</span>
+                            <span class="ml-1 text-[10px] uppercase tracking-wide text-on-surface-variant">{{ $step['state'] }}</span>
+                            @if ($step['detail'])
+                                <span class="block text-[11px] text-on-surface-variant">{{ $step['detail'] }}</span>
+                            @endif
+                        </span>
+                    </li>
+                @endforeach
+            </ol>
+
+            @if ($analysis['reasons'] !== [])
+                <p class="mt-3 text-xs text-on-surface-variant">Next: {{ implode(' · ', $analysis['reasons']) }}</p>
+            @else
+                <p class="mt-3 text-xs text-on-surface-variant">No remaining action on this order.</p>
+            @endif
+
+            <div class="mt-3 flex flex-wrap gap-2">
+                @if ($order->order_status->isConfirmed())
+                    <a href="{{ route('deliveries.create', $order) }}"
+                       class="inline-flex h-10 items-center rounded-full bg-primary px-4 text-xs font-semibold text-on-primary">
+                        Delivery
+                    </a>
+                    <a href="{{ route('shipments.index') }}"
+                       class="inline-flex h-10 items-center rounded-full bg-surface-variant px-4 text-xs font-medium text-on-surface-variant">
+                        Shipments
+                    </a>
+                    <a href="{{ route('pod.index') }}"
+                       class="inline-flex h-10 items-center rounded-full bg-surface-variant px-4 text-xs font-medium text-on-surface-variant">
+                        POD
+                    </a>
+                @endif
+                @if ($invoice)
+                    <a href="{{ route('finance.invoices.show', $invoice) }}"
+                       class="inline-flex h-10 items-center rounded-full bg-surface-variant px-4 text-xs font-medium text-on-surface-variant">
+                        Invoice {{ $invoice->invoice_no }}
+                    </a>
+                    @if ((float) $invoice->outstandingAmount() > 0)
+                        <a href="{{ route('payments.record.create', $invoice) }}"
+                           class="inline-flex h-10 items-center rounded-full bg-tertiary-container px-4 text-xs font-semibold text-on-tertiary-container">
+                            Record payment
+                        </a>
+                    @endif
+                @endif
             </div>
         </div>
 

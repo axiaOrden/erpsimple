@@ -34,6 +34,7 @@ use App\Services\ShipmentService;
 use App\Services\TransitService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Concerns\ProvidesRejectionReasons;
 use Tests\TestCase;
 
 /**
@@ -47,6 +48,7 @@ use Tests\TestCase;
 class FieldProcessAuditTest extends TestCase
 {
     use DatabaseTransactions;
+    use ProvidesRejectionReasons;
 
     private CompanyMaster $company;
 
@@ -254,7 +256,7 @@ class FieldProcessAuditTest extends TestCase
         // Remaining demand (15 CTN) is rejected → the single final invoice is
         // generated for the accepted 15 CTN only.
         $item = $order->fresh(['items'])->items->first();
-        $this->orders->rejectItem($item, 'Customer reduced requirement', $this->employee);
+        $this->orders->rejectItem($item, $this->reason(), $this->employee);
 
         $invoice = Invoice::where('sales_order_no', $order->sales_order_no)->firstOrFail();
         $invoiceItem = InvoiceItem::where('invoice_no', $invoice->invoice_no)->firstOrFail();
@@ -287,7 +289,7 @@ class FieldProcessAuditTest extends TestCase
         $this->assertSame('0.000', $this->transit->reusableBalance($this->employee->employee_id, $this->product->product_id, $this->primary->customer_id));
 
         // B is invoiced for the 10 CTN it accepted.
-        $this->orders->rejectItem($orderB->fresh(['items'])->items->first(), 'remainder', $this->employee);
+        $this->orders->rejectItem($orderB->fresh(['items'])->items->first(), $this->reason(), $this->employee);
         $invoice = Invoice::where('sales_order_no', $orderB->sales_order_no)->firstOrFail();
         $this->assertSame('10.000', (string) InvoiceItem::where('invoice_no', $invoice->invoice_no)->firstOrFail()->quantity);
     }

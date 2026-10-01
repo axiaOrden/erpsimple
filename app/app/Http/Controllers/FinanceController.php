@@ -10,7 +10,9 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Services\FinanceService;
+use App\Services\InvoicePartyService;
 use App\Services\InvoiceService;
+use App\Services\QrCodeService;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -27,6 +29,8 @@ class FinanceController extends Controller
         private readonly InvoiceService $invoices,
         private readonly FinanceService $finance,
         private readonly SyncService $sync,
+        private readonly QrCodeService $qr,
+        private readonly InvoicePartyService $parties,
     ) {}
 
     // ---- Invoices ------------------------------------------------------------
@@ -48,11 +52,20 @@ class FinanceController extends Controller
         $payments = PaymentAllocation::where('invoice_no', $invoice->invoice_no)->get();
         $credits = CreditAllocation::where('invoice_no', $invoice->invoice_no)->get();
 
+        // Opening the invoice is the share moment: ensure the unguessable
+        // public token exists so the QR/JPG can be handed to the customer.
+        $token = $this->invoices->publicToken($invoice);
+        $invoice->refresh();
+        $publicUrl = route('invoice.public', $token);
+
         return view('finance.invoice', [
             'invoice' => $invoice,
             'paymentAllocations' => $payments,
             'creditAllocations' => $credits,
             'exposure' => $this->invoices->exposure($invoice->customer_id, $invoice->company_id),
+            'parties' => $this->parties->parties($invoice),
+            'publicUrl' => $publicUrl,
+            'qrDataUri' => $this->qr->pngDataUri($publicUrl, 6),
         ]);
     }
 

@@ -26,8 +26,11 @@ use Illuminate\Support\Facades\DB;
  *    (a submitted count must never destroy an active Delivery allocation).
  *  - SECONDARY_OBSERVATION counts are stored/reported only; they never touch
  *    inventory and never create movements.
- *  - VAN_CLOSING is stored for Phase 5; its authoritative posting follows the
- *    VAN workflow and is intentionally NOT invented here.
+ *  - VAN_CLOSING is OBSERVATION-ONLY (audited 2026-10-01): submitted counts
+ *    are stored and reportable but post nothing. A VAN closes its cycle
+ *    commercially (SO → Delivery → Shipment START → POD → Invoice → Payment),
+ *    the current model requires NO VAN inventory count, and no authoritative
+ *    VAN closing posting is invented (docs/ARCHITECTURE.md §14).
  *
  * Count scope is customer + product (per item); one counted SKU never locks
  * or resets another product at the same customer.

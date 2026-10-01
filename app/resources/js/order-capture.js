@@ -45,10 +45,15 @@ export function orderCaptureComponent(existing = null) {
             return el ? el.textContent.trim() : this.supplying;
         },
 
+        /**
+         * Order-unit options: the product's BASE unit first, then only the
+         * alternatives that carry a maintained product_unit_conversion row
+         * (the server decides which those are — never a global unit list).
+         */
         unitsFor(line) {
             const p = this.products.find((x) => x.id === line.product_id);
 
-            if (!p) return ['PCS'];
+            if (!p) return [];
 
             return p.units ?? [p.basic_unit];
         },
@@ -153,7 +158,10 @@ export function orderCaptureComponent(existing = null) {
 
             const data = await response.json();
 
-            this.products = data.products.map((p) => ({ ...p, units: [p.basic_unit, ...(p.alt_units ?? [])] }));
+            this.products = data.products.map((p) => ({
+                ...p,
+                units: [p.basic_unit, ...(p.alt_units ?? [])],
+            }));
             this.priceAmbiguous = data.price_ambiguous ?? [];
         },
 

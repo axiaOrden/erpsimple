@@ -30,6 +30,12 @@ use Illuminate\Support\Facades\DB;
  *    SELECT ... FOR UPDATE; quantities are decimal-safe in BASIC units.
  *  - Cumulative allocations never exceed confirmed demand; rejected items
  *    take no NEW allocation but keep their existing allocations.
+ *  - DEAL/free lines are DEPENDENT fulfilment: a free line may only be
+ *    allocated up to the deal entitlement its paid parent line has actually
+ *    earned (see DealEntitlementService). A free line can never outlive its
+ *    parent: with no parent eligibility it has none. Existing physical
+ *    allocations are never erased — a terminally rejected parent only blocks
+ *    NEW free allocation and closes the free line's UNEARNED remainder.
  *  - Source compatibility: allocation uses ONLY the SO's source customer
  *    inventory (Primary or its SHIP_TO); no silent fallback either way.
  *  - Idempotency: a retried allocation request replays the original result
@@ -44,6 +50,7 @@ class DeliveryService
         private readonly ProductUnitService $units,
         private readonly TransitService $transit,
         private readonly InvoiceService $invoices,
+        private readonly DealEntitlementService $entitlements,
     ) {}
 
     /** Company-prefixed delivery number: DEL-EMANL-2026-00001. */
@@ -73,13 +80,7 @@ class DeliveryService
      */
     public function allocatedBasicQty(SalesOrderItem $item): string
     {
-        $sum = DeliveryItem::where('sales_order_no', $item->sales_order_no)
-            ->where('sales_order_item_no', $item->item_no)
-            ->whereHas('delivery', fn ($q) => $q->where('delivery_status', '!=', DeliveryStatus::DRAFT->value))
-            ->get()
-            ->sum(fn (DeliveryItem $d) => (float) $this->toBasicForItem($item, (string) $d->allocated_qty, (string) $d->delivery_unit));
-
-        return Decimal::format((float) $sum, 3);
+        return $this->entitlements->allocatedBasic($item);
     }
 
     /**
@@ -121,6 +122,17 @@ class DeliveryService
             $allocatedBasic = $this->allocatedBasicQty($item);
             $remaining = $this->remainingBasicQty($item);
 
+            // DEAL/free dependency: the free line may only claim what the
+            // deal entitlement of its paid parent line has actually earned.
+            $dependency = $this->entitlements->context($item);
+
+            // The dependency NEVER increases demand — it can only shrink the
+            // allocatable quantity of a free line (and explains why).
+            $effectiveRemaining = $dependency !== null
+                && Decimal::compare($dependency['effective_remaining_basic'], $remaining, 3) < 0
+                    ? $dependency['effective_remaining_basic']
+                    : $remaining;
+
             return [
                 'item_no' => $item->item_no,
                 'product_id' => $item->product_id,
@@ -131,7 +143,10 @@ class DeliveryService
                 'order_unit' => (string) $item->order_unit,
                 'ordered_basic' => $orderedBasic,
                 'allocated_basic' => $allocatedBasic,
-                'remaining_basic' => $remaining,
+                'own_remaining_basic' => $remaining,
+                'remaining_basic' => $effectiveRemaining,
+                'dependency' => $dependency,
+                'dependency_note' => $dependency !== null ? $this->dependencyNote($dependency) : null,
                 'rejected_basic' => $item->rejection_status === RejectionStatus::REJECTED
                     ? Decimal::sub($orderedBasic, $allocatedBasic, 3)
                     : '0.000',
@@ -141,6 +156,22 @@ class DeliveryService
                 'basic_unit' => $inventory->basic_unit ?? $item->product->basic_unit,
             ];
         });
+    }
+
+    /**
+     * Human-readable DEAL/free dependency line (see DealEntitlementService).
+     *
+     * @param  array<string, mixed>  $dependency
+     */
+    public function dependencyNote(array $dependency): string
+    {
+        return $this->entitlements->note($dependency);
+    }
+
+    /** Dependency context of a DEAL/free SO line (null for ordinary lines). */
+    public function dependencyContext(SalesOrderItem $item): ?array
+    {
+        return $this->entitlements->context($item);
     }
 
     /**
@@ -183,8 +214,13 @@ class DeliveryService
         DB::transaction(function () use (&$delivery, $order, $employee, $stockHolder, $prepared) {
             // Demand anchor for mixed stock+transit allocation (Phase 9):
             // every allocation serializes on the SO row, so concurrent stock,
-            // transit or mixed allocations can never exceed remaining demand.
+            // transit or mixed allocations can never exceed remaining demand
+            // — and two deliveries can never race for the same DEAL/free
+            // entitlement (the dependency read below happens under this lock).
             SalesOrder::whereKey($order->sales_order_no)->lockForUpdate()->first();
+
+            $items = $this->lockedOrderItems($order);
+            $requestedBasic = $this->requestedBasicByItem($prepared);
 
             $delivery = Delivery::create([
                 'delivery_no' => $this->nextNumber($order->company_id),
@@ -197,7 +233,7 @@ class DeliveryService
             ]);
 
             foreach ($prepared->values() as $index => $line) {
-                $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee);
+                $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee, $items, $requestedBasic);
             }
 
             // Strict credit rule (audit correction): a debtor with outstanding
@@ -371,13 +407,16 @@ class DeliveryService
                 abort(422, 'Only DRAFT deliveries can be (re-)allocated.');
             }
 
+            $items = $this->lockedOrderItems($order);
+            $requestedBasic = $this->requestedBasicByItem($prepared);
+
             // Re-allocation REPLACES the (released) draft lines wholesale.
             // Transit reservations from any released allocation were already
             // released back to the transit pool by releaseDelivery().
             DeliveryItem::where('delivery_no', $delivery->delivery_no)->delete();
 
             foreach ($prepared->values() as $index => $line) {
-                $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee);
+                $this->allocateLine($delivery, $order, $stockHolder, $line, $index + 1, $employee, $items, $requestedBasic);
             }
 
             // Strict credit rule: same boundary as createAndAllocate — see the
@@ -464,14 +503,62 @@ class DeliveryService
     }
 
     /**
-     * Authoritative single-line allocation. Runs INSIDE the delivery
-     * transaction: locks the inventory row FOR UPDATE (customer + product
-     * scope ONLY), validates remaining demand and unrestricted stock under
-     * the lock, then transfers unrestricted → restricted.
+     * CURRENT (locking) read of every SO line of the order, keyed by item_no.
+     *
+     * Allocation / re-allocation serialize on the order header row, so these
+     * rows are stable for the rest of the transaction. A plain (snapshot)
+     * read could serve a stale rejection status or a stale cumulative
+     * allocation figure to the parent/free dependency check.
+     *
+     * @return Collection<int, SalesOrderItem>
      */
-    private function allocateLine(Delivery $delivery, SalesOrder $order, CustomerMaster $stockHolder, array $line, int $itemNo, ?EmployeeMaster $employee = null): void
+    private function lockedOrderItems(SalesOrder $order): Collection
     {
-        $item = $line['item'];
+        return SalesOrderItem::where('sales_order_no', $order->sales_order_no)
+            ->orderBy('item_no')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('item_no');
+    }
+
+    /**
+     * Basic quantity requested per SO item in THIS operation. A free line's
+     * parent earns its deal entitlement within the same request, so the two
+     * lines can be allocated together (and in any order).
+     *
+     * @param  Collection<int, array<string, mixed>>  $prepared
+     * @return Collection<int, string> item_no => basic qty
+     */
+    private function requestedBasicByItem(Collection $prepared): Collection
+    {
+        return $prepared
+            ->groupBy(fn (array $line) => (int) $line['item']->item_no)
+            ->map(fn (Collection $lines) => Decimal::format(
+                (float) array_sum(array_map(fn (array $l) => (float) $l['basic_qty'], $lines->all())),
+                3,
+            ));
+    }
+
+    /**
+     * Authoritative single-line allocation. Runs INSIDE the delivery
+     * transaction: re-reads the SO line under lock, enforces the DEAL/free
+     * parent dependency, locks the inventory row FOR UPDATE (customer +
+     * product scope ONLY), validates remaining demand and unrestricted stock
+     * under the lock, then transfers unrestricted → restricted.
+     *
+     * @param  Collection<int, SalesOrderItem>  $items  current (locking) read of the order's lines
+     * @param  Collection<int, string>  $requestedBasic  item_no ⇒ basic qty requested in this operation
+     */
+    private function allocateLine(Delivery $delivery, SalesOrder $order, CustomerMaster $stockHolder, array $line, int $itemNo, ?EmployeeMaster $employee, Collection $items, Collection $requestedBasic): void
+    {
+        // Trust the CURRENT row, not the pre-transaction instance: a rejection
+        // or another allocation may have landed while this request waited.
+        $item = $items->get((int) $line['item']->item_no);
+
+        if ($item === null) {
+            abort(422, 'Sales order item '.$line['item']->item_no.' no longer belongs to this order.');
+        }
+
         $product = $line['product'];
         $transitBasic = (string) ($line['transit_basic'] ?? '0.000');
         $stockBasic = Decimal::sub($line['basic_qty'], $transitBasic, 3);
@@ -479,6 +566,29 @@ class DeliveryService
         // Item eligibility: rejected items take no NEW allocation.
         if ($item->rejection_status === RejectionStatus::REJECTED) {
             abort(422, $product->product_description.' was rejected — no new allocation is allowed. Existing allocations are unaffected.');
+        }
+
+        // DEAL/free dependency (fail closed): a free line is DEPENDENT
+        // fulfilment, so it may only claim the deal entitlement its paid
+        // parent line has actually earned (counting the parent quantity this
+        // same operation allocates). A free line without a resolvable parent
+        // is never independently fulfillable.
+        if ($item->is_free_item) {
+            $parent = $this->entitlements->parentOf($item);
+            $dependency = $this->entitlements->context(
+                $item,
+                $parent !== null ? (string) ($requestedBasic->get((int) $parent->item_no) ?? '0.000') : '0.000',
+            );
+
+            if ($dependency === null) {
+                abort(422, $product->product_description.' is a DEAL/free line whose paid parent line cannot be resolved — dependent free demand is never fulfilled on its own.');
+            }
+
+            if (Decimal::compare($line['basic_qty'], $dependency['effective_remaining_basic'], 3) > 0) {
+                abort(422, 'Free deal quantity for '.$product->product_description.' cannot exceed the deal entitlement earned by its parent line '
+                    .$dependency['parent_item_no'].'. '.$this->dependencyNote($dependency)
+                    .'. Existing allocations are never reduced, and free quantity can never move ahead of its parent\'s entitlement.');
+            }
         }
 
         // Demand is checked ONCE for the FULL requested quantity — the

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Weekday;
 use App\Models\CompanyMaster;
 use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
@@ -17,7 +18,14 @@ use Illuminate\Validation\Rule;
  */
 class FjpController extends Controller
 {
-    private const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+    /**
+     * Numeric weekday indexes in display order (Monday-first). The column is
+     * 0 = Sunday … 6 = Saturday; the picker simply lists Monday first.
+     */
+    private static function days(): array
+    {
+        return array_map(fn (Weekday $day) => $day->value, Weekday::ordered());
+    }
 
     public function __construct(private readonly CompanyContext $companyContext) {}
 
@@ -40,7 +48,7 @@ class FjpController extends Controller
             'plans' => $plans,
             'companyId' => $companyId,
             'companies' => $this->companyChoices(),
-            'days' => self::DAYS,
+            'days' => self::days(),
         ]);
     }
 
@@ -55,7 +63,7 @@ class FjpController extends Controller
             'companyId' => $companyId,
             'employees' => EmployeeMaster::forCompany($companyId)->where('active', true)->orderBy('employee_name')->get(),
             'customers' => CustomerMaster::where('active', true)->orderBy('business_name')->get(),
-            'days' => self::DAYS,
+            'days' => self::days(),
             'companies' => $this->companyChoices(),
         ]);
     }
@@ -70,7 +78,7 @@ class FjpController extends Controller
             'employee_id' => ['required', Rule::exists('employee_master', 'employee_id')->where('company_id', $companyId)],
             'customer_id' => ['required', 'exists:customer_master,customer_id'],
             'preferred_week' => ['nullable', 'integer', 'min:1', 'max:4'],
-            'preferred_day' => ['required', Rule::in(self::DAYS)],
+            'preferred_day' => ['required', 'integer', Rule::in(self::days())],
             'active' => ['sometimes', 'boolean'],
         ]);
 
@@ -95,7 +103,7 @@ class FjpController extends Controller
             'companyId' => $plan->company_id,
             'employees' => EmployeeMaster::forCompany($plan->company_id)->orderBy('employee_name')->get(),
             'customers' => CustomerMaster::where('active', true)->orderBy('business_name')->get(),
-            'days' => self::DAYS,
+            'days' => self::days(),
             'companies' => $this->companyChoices(),
         ]);
     }
@@ -108,7 +116,7 @@ class FjpController extends Controller
             'employee_id' => ['required', Rule::exists('employee_master', 'employee_id')->where('company_id', $plan->company_id)],
             'customer_id' => ['required', 'exists:customer_master,customer_id'],
             'preferred_week' => ['nullable', 'integer', 'min:1', 'max:4'],
-            'preferred_day' => ['required', Rule::in(self::DAYS)],
+            'preferred_day' => ['required', 'integer', Rule::in(self::days())],
             'active' => ['sometimes', 'boolean'],
         ]);
 

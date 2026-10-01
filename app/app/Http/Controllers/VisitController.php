@@ -3,24 +3,33 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomerEmployee;
-use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
 use App\Models\CustomerVisitAttendance;
 use App\Models\Delivery;
+use App\Models\Invoice;
 use App\Models\SalesOrder;
+use App\Models\Shipment;
 use App\Models\StockCount;
 use App\Services\AttendanceService;
+use App\Services\FieldDirectoryService;
 use App\Services\FjpRotationService;
 use App\Services\InvoiceService;
+use App\Services\SalesLifecycleService;
 use App\Services\SalesOrderService;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
- * Field-sales visit workflow (Phase 3): today's FJP visits, attendance
- * capture (online + offline-synced), and the customer field view.
+ * Field-sales visit workflow.
+ *
+ *  - FJP screen: TODAY's applicable customers (rotation week + weekday), each
+ *    with first/last check-in, last stock count, preferred visit and visit
+ *    status — plus a search that ALSO finds assigned customers who are not on
+ *    today's plan (the employee can still visit them).
+ *  - Customer context page: everything the employee needs while standing in
+ *    front of the customer (attendance, counts, orders, deliveries/POD,
+ *    invoice + payment, history) WITHOUT leaving the customer.
  */
 class VisitController extends Controller
 {
@@ -30,11 +39,11 @@ class VisitController extends Controller
         private readonly FjpRotationService $rotation,
         private readonly SalesOrderService $orders,
         private readonly InvoiceService $invoices,
+        private readonly SalesLifecycleService $lifecycle,
+        private readonly FieldDirectoryService $directory,
     ) {}
 
-    /**
-     * Mobile-first "Today's visits" experience.
-     */
+    /** FJP screen — today's applicable customers. */
     public function today(Request $request): View
     {
         $user = $request->user();
@@ -47,50 +56,55 @@ class VisitController extends Controller
                 'employee' => null,
                 'visits' => collect(),
                 'assignedCustomers' => collect(),
+                'searchMatches' => collect(),
+                'search' => null,
+                'planTotal' => 0,
+                'perPage' => 15,
+                'nextPerPage' => 30,
+                'paginator' => null,
+                'rotationWeek' => null,
             ]);
         }
 
-        $today = today();
+        $search = $request->query('q');
+        $search = is_string($search) && trim($search) !== '' ? trim($search) : null;
+        $perPage = $this->perPage($request);
 
-        // FJP matching: current 4-week rotation week + today's weekday.
-        // preferred_week is a continuous rotation position (1-4), NOT
-        // week-of-month; null = every week on the configured day.
-        $rotationWeek = $this->rotation->rotationWeek($today);
+        $plan = $this->directory->todayPlan($employee, $search, $perPage);
+        $planIds = $plan['rows']->map(fn (array $row) => $row['customer']->customer_id)->all();
 
-        $fjpToday = CustomerFjp::with('customer')
-            ->where('employee_id', $employee->employee_id)
-            ->where('active', true)
-            ->where('preferred_day', strtoupper($today->format('l')))
-            ->where(fn ($q) => $q->whereNull('preferred_week')->orWhere('preferred_week', $rotationWeek))
-            ->get();
-
-        // All assigned customers (also surfaced as manual visit options).
-        $assignedCustomers = CustomerMaster::whereIn(
-            'customer_id',
-            CustomerEmployee::where('employee_id', $employee->employee_id)->pluck('customer_id'),
-        )->where('active', true)->orderBy('business_name')->get();
-
-        // Attendance today, grouped per customer for status chips.
-        $attendanceToday = CustomerVisitAttendance::where('employee_id', $employee->employee_id)
-            ->whereDate('attendance_datetime', $today)
-            ->get()
-            ->groupBy('customer_id');
-
-        $visits = $fjpToday->map(fn (CustomerFjp $fjp) => $this->visitRow(
-            $fjp->customer,
-            $attendanceToday->get($fjp->customer_id),
-        ));
+        // A searched customer may be assigned without appearing in today's
+        // plan; surfacing them keeps the FJP screen usable as the day's
+        // worklist instead of a dead end.
+        $searchMatches = $search === null
+            ? collect()
+            : $this->directory->secondaryDirectory($employee, $search, 8)->getCollection()
+                ->reject(fn (CustomerMaster $c) => in_array($c->customer_id, $planIds, true))
+                ->values();
 
         return view('visits.today', [
             'employee' => $employee,
-            'visits' => $visits,
-            'assignedCustomers' => $assignedCustomers,
-            'attendanceToday' => $attendanceToday,
+            // Kept as `visits` (rows of arrays with a `customer` key) — the
+            // FJP row contract other screens and tests rely on.
+            'visits' => $plan['rows'],
+            'planTotal' => $plan['total'],
+            'paginator' => $plan['paginator'],
+            'search' => $search,
+            'searchMatches' => $searchMatches,
+            'perPage' => $perPage,
+            'nextPerPage' => min(120, $perPage * 2),
+            'rotationWeek' => $this->rotation->rotationWeek(today()),
+            'assignedCustomers' => CustomerMaster::whereIn('customer_id', $this->directory->assignedCustomerIds($employee))
+                ->where('active', true)
+                ->orderBy('business_name')
+                ->limit(100)
+                ->get(),
         ]);
     }
 
     /**
-     * Customer field view: stock-ish info, previous visits, quick actions.
+     * Contextual customer page (Primary and Secondary alike): no reason to
+     * leave the customer to find their orders, deliveries, invoice or proof.
      */
     public function customer(Request $request, string $customerId): View
     {
@@ -107,6 +121,8 @@ class VisitController extends Controller
 
         abort_unless($assigned, 403, 'You are not assigned to this customer.');
 
+        $companyId = $employee->company_id;
+
         $visits = CustomerVisitAttendance::where('employee_id', $employee->employee_id)
             ->where('customer_id', $customer->customer_id)
             ->orderByDesc('attendance_datetime')
@@ -114,6 +130,30 @@ class VisitController extends Controller
             ->get();
 
         $todaySummary = $this->attendance->effectiveVisit($employee, $customer->customer_id, today());
+
+        $openOrders = SalesOrder::with('items')
+            ->where('sales_employee_id', $employee->employee_id)
+            ->where('sold_to_customer_id', $customer->customer_id)
+            ->whereNotIn('order_status', ['COMPLETED', 'COMPLETELY_REJECTED'])
+            ->latest()
+            ->limit(5)
+            ->get();
+
+        $orderAnalysis = $this->lifecycle->classifyOrders($openOrders);
+
+        $shipments = Shipment::with('deliveries')
+            ->where('company_id', $companyId)
+            ->where('source_customer_id', $customer->customer_id)
+            ->whereIn('shipment_status', ['DRAFT', 'READY', 'IN_TRANSIT'])
+            ->latest()
+            ->limit(5)
+            ->get();
+
+        $invoices = Invoice::where('customer_id', $customer->customer_id)
+            ->where('company_id', $companyId)
+            ->orderByDesc('invoice_date')
+            ->limit(5)
+            ->get();
 
         return view('visits.customer', [
             'customer' => $customer,
@@ -129,21 +169,22 @@ class VisitController extends Controller
                 ->latest()
                 ->limit(3)
                 ->get(),
-            'openOrders' => SalesOrder::with('items')
-                ->where('sales_employee_id', $employee->employee_id)
-                ->where('sold_to_customer_id', $customer->customer_id)
-                ->whereNotIn('order_status', ['COMPLETED', 'COMPLETELY_REJECTED'])
-                ->latest()
-                ->limit(5)
-                ->get(),
+            'openOrders' => $openOrders,
+            'orderAnalysis' => $orderAnalysis,
             'activeDeliveries' => Delivery::with('items')
-                ->where('company_id', $employee->company_id)
+                ->where('company_id', $companyId)
                 ->where('customer_id', $customer->customer_id)
-                ->whereIn('delivery_status', ['ALLOCATED', 'SHIPPED', 'PARTIALLY_CONFIRMED'])
+                ->whereIn('delivery_status', ['ALLOCATED', 'SHIPPED', 'PARTIALLY_DELIVERED'])
                 ->latest()
                 ->limit(5)
                 ->get(),
-            'exposure' => $this->invoices->exposure($customer->customer_id, $employee->company_id),
+            'invoices' => $invoices,
+            'shipments' => $shipments,
+            // Preferred visits for THIS employee + company + customer, ACTIVE
+            // rows only: the same customer may carry schedules for other
+            // companies/employees, and those are never shown here.
+            'plan' => $this->directory->preferredVisits($employee, $customer->customer_id),
+            'exposure' => $this->invoices->exposure($customer->customer_id, $companyId),
         ]);
     }
 
@@ -209,28 +250,10 @@ class VisitController extends Controller
             ->header('X-Idempotent-Replay', $result['replayed'] ? '1' : '0');
     }
 
-    /**
-     * @param  Collection<int, CustomerVisitAttendance>|Collection<int, Collection<int, CustomerVisitAttendance>>  $records
-     */
-    private function visitRow(CustomerMaster $customer, $records): array
+    private function perPage(Request $request): int
     {
-        $flat = $records?->flatten();
+        $perPage = (int) $request->query('per_page', 15);
 
-        $checkIn = $flat?->min('attendance_datetime');
-        $checkOut = $flat?->max('attendance_datetime');
-
-        $status = 'PENDING';
-
-        if ($flat !== null && $flat->isNotEmpty()) {
-            $status = $flat->count() === 1 ? 'CHECKED_IN' : 'CHECKED_OUT';
-        }
-
-        return [
-            'customer' => $customer,
-            'records' => $flat?->count() ?? 0,
-            'check_in' => $checkIn?->format('H:i'),
-            'check_out' => $checkOut?->format('H:i'),
-            'status' => $status,
-        ];
+        return max(5, min(120, $perPage <= 0 ? 15 : $perPage));
     }
 }
