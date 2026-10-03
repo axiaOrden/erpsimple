@@ -36,6 +36,24 @@ CREATE TABLE unit_master (
 
 
 /* ============================================================
+   2A. SALES REGION MASTER
+   ============================================================ */
+
+CREATE TABLE sales_region (
+    region_code VARCHAR(20) NOT NULL,
+    description VARCHAR(100) NOT NULL,
+    zone VARCHAR(50) NOT NULL,
+    sort_order INT UNSIGNED NOT NULL,
+
+    created_at DATETIME NULL,
+    updated_at DATETIME NULL,
+
+    PRIMARY KEY (region_code),
+    KEY idx_sr_zone_sort (zone, sort_order)
+) ENGINE=InnoDB;
+
+
+/* ============================================================
    3. PRODUCT MASTER
    ============================================================ */
 
@@ -62,7 +80,7 @@ CREATE TABLE product_master (
 
     PRIMARY KEY (product_id),
 
-    UNIQUE KEY uq_pm_company_sku (
+    KEY idx_pm_company_sku (
         company_id,
         product_sku
     ),
@@ -120,7 +138,7 @@ CREATE TABLE product_unit_conversion (
    ============================================================ */
 
 CREATE TABLE customer_master (
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
     business_name VARCHAR(255) NOT NULL,
 
@@ -131,7 +149,10 @@ CREATE TABLE customer_master (
         'SHIP_TO'
     ) NOT NULL,
 
-    parent_customer_id VARCHAR(50) NULL,
+    parent_customer_id BIGINT UNSIGNED NULL,
+
+    ext_origin_id VARCHAR(100) NULL,
+    ext_origin_company VARCHAR(100) NULL,
 
     contact_person VARCHAR(255) NULL,
     phone_number VARCHAR(50) NULL,
@@ -194,6 +215,10 @@ CREATE TABLE employee_master (
 
     employee_name VARCHAR(255) NOT NULL,
 
+    region_code VARCHAR(20) NULL,
+    partner_function VARCHAR(20) NULL,
+    partner_id VARCHAR(50) NULL,
+
     email_address VARCHAR(255) NULL,
     phone_number VARCHAR(50) NULL,
 
@@ -209,11 +234,22 @@ CREATE TABLE employee_master (
         company_id
     ),
 
+    KEY idx_em_company_region (company_id, region_code),
+    KEY idx_em_company_function (company_id, partner_function),
+
     CONSTRAINT fk_em_company
         FOREIGN KEY (company_id)
         REFERENCES company_master(company_id)
 
 ) ENGINE=InnoDB;
+
+ALTER TABLE employee_master
+    ADD CONSTRAINT fk_em_region
+        FOREIGN KEY (region_code)
+        REFERENCES sales_region(region_code),
+    ADD CONSTRAINT fk_em_partner
+        FOREIGN KEY (partner_id)
+        REFERENCES employee_master(employee_id);
 
 
 /* ============================================================
@@ -268,7 +304,7 @@ CREATE TABLE app_user (
    ============================================================ */
 
 CREATE TABLE customer_employee (
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     employee_id VARCHAR(50) NOT NULL,
 
     role VARCHAR(30) NOT NULL DEFAULT 'SE',
@@ -328,8 +364,7 @@ CREATE TABLE customer_fjp (
     fjp_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
     company_id VARCHAR(20) NOT NULL,
-    employee_id VARCHAR(50) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     preferred_week TINYINT UNSIGNED NULL,
 
@@ -347,25 +382,21 @@ CREATE TABLE customer_fjp (
 
     KEY idx_fjp_plan (
         company_id,
-        employee_id,
-        preferred_day
-    ),
-
-    KEY idx_fjp_employee (
-        employee_id
+        preferred_day,
+        preferred_week
     ),
 
     KEY idx_fjp_customer (
         customer_id
     ),
 
+    KEY idx_fjp_company (
+        company_id
+    ),
+
     CONSTRAINT fk_fjp_company
         FOREIGN KEY (company_id)
         REFERENCES company_master(company_id),
-
-    CONSTRAINT fk_fjp_employee
-        FOREIGN KEY (employee_id)
-        REFERENCES employee_master(employee_id),
 
     CONSTRAINT fk_fjp_customer
         FOREIGN KEY (customer_id)
@@ -387,7 +418,7 @@ CREATE TABLE customer_visit_attendance (
 
     company_id VARCHAR(20) NOT NULL,
     employee_id VARCHAR(50) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     attendance_datetime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -612,7 +643,7 @@ CREATE TABLE deal_reward (
    ============================================================ */
 
 CREATE TABLE inventory (
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     product_id VARCHAR(50) NOT NULL,
 
     unrestricted_qty DECIMAL(18,3) NOT NULL DEFAULT 0,
@@ -651,7 +682,7 @@ CREATE TABLE stock_count (
     count_no VARCHAR(50) NOT NULL,
 
     company_id VARCHAR(20) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     employee_id VARCHAR(50) NOT NULL,
 
     count_type ENUM(
@@ -746,9 +777,9 @@ CREATE TABLE sales_order (
 
     company_id VARCHAR(20) NOT NULL,
 
-    supplying_customer_id VARCHAR(50) NOT NULL,
-    source_customer_id VARCHAR(50) NOT NULL,
-    sold_to_customer_id VARCHAR(50) NOT NULL,
+    supplying_customer_id BIGINT UNSIGNED NOT NULL,
+    source_customer_id BIGINT UNSIGNED NOT NULL,
+    sold_to_customer_id BIGINT UNSIGNED NOT NULL,
 
     sales_employee_id VARCHAR(50) NOT NULL,
 
@@ -976,8 +1007,8 @@ CREATE TABLE delivery (
     company_id VARCHAR(20) NOT NULL,
     sales_order_no VARCHAR(50) NOT NULL,
 
-    source_customer_id VARCHAR(50) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    source_customer_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     delivery_status ENUM(
         'DRAFT',
@@ -1099,7 +1130,7 @@ CREATE TABLE shipment (
     shipment_no VARCHAR(50) NOT NULL,
 
     company_id VARCHAR(20) NOT NULL,
-    source_customer_id VARCHAR(50) NOT NULL,
+    source_customer_id BIGINT UNSIGNED NOT NULL,
 
     shipment_status ENUM(
         'DRAFT',
@@ -1193,7 +1224,7 @@ CREATE TABLE inventory_movement (
     movement_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
     company_id VARCHAR(20) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     product_id VARCHAR(50) NOT NULL,
 
     movement_type ENUM(
@@ -1334,7 +1365,7 @@ CREATE TABLE invoice (
     invoice_no VARCHAR(50) NOT NULL,
 
     company_id VARCHAR(20) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     sales_order_no VARCHAR(50) NOT NULL,
 
@@ -1466,7 +1497,7 @@ CREATE TABLE payment (
     payment_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 
     company_id VARCHAR(20) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     payment_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1599,7 +1630,7 @@ CREATE TABLE customer_credit (
     credit_no VARCHAR(50) NOT NULL,
 
     company_id VARCHAR(20) NOT NULL,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
 
     credit_source ENUM(
         'POD_DAMAGE',
@@ -1721,7 +1752,7 @@ CREATE TABLE transit_stock (
     origin_shipment_no      VARCHAR(50)  NOT NULL,
     origin_delivery_no      VARCHAR(50)  NOT NULL,
     origin_delivery_item_no INT UNSIGNED NOT NULL,
-    source_customer_id      VARCHAR(50)  NOT NULL,
+    source_customer_id      BIGINT UNSIGNED  NOT NULL,
     product_id              VARCHAR(50)  NOT NULL,
 
     original_quantity       DECIMAL(18,3) NOT NULL,

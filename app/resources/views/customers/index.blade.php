@@ -36,6 +36,31 @@
         </div>
     </div>
 
+    <div class="m-card mb-4 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="max-w-2xl">
+                <h2 class="text-sm font-semibold">Upload company preferred visits</h2>
+                <p class="mt-1 text-xs text-on-surface-variant">
+                    Upload a pipe-delimited CSV or TXT file using
+                    <code>customer id|preferred week|preferred day</code>.
+                    Week accepts 1-4 or blank/*/EVERY. Day accepts Sunday-Saturday or 0-6.
+                    Each uploaded customer's existing company schedule is replaced.
+                </p>
+            </div>
+            <form method="POST" action="{{ route('customers.fjp.import') }}" enctype="multipart/form-data"
+                  class="flex flex-wrap items-center gap-2">
+                @csrf
+                <input type="file" name="fjp_file" accept=".csv,.txt,text/csv,text/plain" required
+                       class="block max-w-64 text-xs text-on-surface-variant file:mr-2 file:rounded-full file:border-0 file:bg-surface-variant file:px-3 file:py-2 file:font-medium">
+                <button type="submit"
+                        class="inline-flex h-10 items-center rounded-full bg-primary px-4 text-sm font-semibold text-on-primary">
+                    Upload FJP
+                </button>
+            </form>
+        </div>
+        <x-input-error :messages="$errors->get('fjp_file')" class="mt-2" />
+    </div>
+
     @if ($customers->isEmpty())
         <div class="m-card p-8 text-center">
             <p class="font-medium text-on-surface">No customers found</p>
@@ -44,14 +69,38 @@
             </p>
         </div>
     @else
-        <div class="m-card divide-y divide-outline-variant">
-            @foreach ($customers as $customer)
-                <div class="m-list-item">
+        <form method="POST" action="{{ route('customers.fjp.destroy-selected') }}"
+              x-data="{ selected: [] }"
+              @submit="if (! confirm('Clear all preferred visit times for the selected customers in your company? This cannot be undone.')) { $event.preventDefault() }">
+            @csrf
+            @method('delete')
+
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <label class="inline-flex items-center gap-2 text-sm font-medium">
+                    <input type="checkbox" class="rounded border-outline text-primary focus:ring-primary"
+                           @change="selected = $event.target.checked ? {{ Js::from($customers->pluck('customer_id')->map(fn ($id) => (string) $id)->values()) }} : []"
+                           :checked="selected.length === {{ $customers->count() }}">
+                    Select all
+                </label>
+                <button type="submit" :disabled="selected.length === 0"
+                        class="inline-flex h-10 items-center rounded-full bg-error-container px-4 text-sm font-semibold text-on-error-container disabled:cursor-not-allowed disabled:opacity-50">
+                    Clear FJP
+                </button>
+            </div>
+
+            <div class="m-card divide-y divide-outline-variant">
+                @foreach ($customers as $customer)
+                    <div class="m-list-item">
+                    <input type="checkbox" name="customer_ids[]" value="{{ $customer->customer_id }}" x-model="selected"
+                           aria-label="Select {{ $customer->business_name }}"
+                           class="rounded border-outline text-primary focus:ring-primary">
                     <span class="w-10 h-10 rounded-full bg-surface-variant text-on-surface-variant grid place-items-center text-xs font-semibold shrink-0">
                         {{ strtoupper(substr($customer->business_name, 0, 2)) }}
                     </span>
                     <div class="min-w-0 flex-1">
-                        <p class="font-medium truncate">{{ $customer->business_name }}</p>
+                        <a href="{{ route('customers.show', $customer) }}" class="block font-medium truncate text-primary">
+                            {{ $customer->business_name }}
+                        </a>
                         <p class="text-xs text-on-surface-variant truncate">
                             {{ $customer->customer_id }}
                             @if ($customer->parent)
@@ -64,15 +113,21 @@
                     </div>
                     <span class="m-chip shrink-0 {{ $customer->active ? '' : 'm-chip-error' }}">{{ $customer->customer_type->value }}</span>
 
+                    <a href="{{ route('customers.show', $customer) }}"
+                       class="h-10 px-4 inline-flex items-center rounded-full bg-surface-variant text-on-surface-variant text-sm font-medium shrink-0">
+                        View
+                    </a>
+
                     @can('update', $customer)
                         <a href="{{ route('customers.edit', $customer) }}"
                            class="h-10 px-4 inline-flex items-center rounded-full bg-primary-container text-on-primary-container text-sm font-medium shrink-0">
                             Edit
                         </a>
                     @endcan
-                </div>
-            @endforeach
-        </div>
+                    </div>
+                @endforeach
+            </div>
+        </form>
 
         <div class="mt-4">{{ $customers->links() }}</div>
     @endif

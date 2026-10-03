@@ -107,6 +107,7 @@ class PublicInvoiceController extends Controller
         // original filename are never exposed through the public endpoint.
         return $disk->response($evidence->stored_path, 'payment-evidence.'.self::EVIDENCE_EXTENSIONS[$mime], [
             'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="payment-evidence.'.self::EVIDENCE_EXTENSIONS[$mime].'"',
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
         ]);

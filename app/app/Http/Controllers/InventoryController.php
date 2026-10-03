@@ -91,8 +91,28 @@ class InventoryController extends Controller
 
         abort_if($employee === null, 403, 'Your login is not linked to an employee record.');
 
+        $customers = $this->visibleCountCustomers($user)->values();
+        $lockedCustomer = null;
+        $lockedCountType = null;
+
+        if ($request->filled('customer')) {
+            $lockedCustomer = $customers->first(
+                fn (CustomerMaster $customer) => (string) $customer->customer_id === $request->string('customer')->toString(),
+            );
+            abort_if($lockedCustomer === null, 403, 'This customer is outside your count scope.');
+
+            $lockedCountType = match ($lockedCustomer->customer_type->value) {
+                'PRIMARY' => CountType::PRIMARY_OPERATIONAL->value,
+                'SECONDARY' => CountType::SECONDARY_OBSERVATION->value,
+                'VAN' => CountType::VAN_CLOSING->value,
+                default => abort(422, 'This customer type does not support a contextual stock count.'),
+            };
+        }
+
         return view('inventory.count-create', [
-            'customers' => $this->visibleCountCustomers($user)->values(),
+            'customers' => $customers,
+            'lockedCustomer' => $lockedCustomer,
+            'lockedCountType' => $lockedCountType,
             'products' => ProductMaster::query()
                 ->when(! $user->isSuperadmin(), fn ($q) => $q->where('company_id', $user->company_id))
                 ->when($user->isSalesEmployee(), function ($query) use ($employee) {
@@ -128,6 +148,14 @@ class InventoryController extends Controller
             'lines.*.counted_qty' => ['required', 'numeric', 'min:0'],
             'lines.*.count_unit' => ['required', 'string'],
         ]);
+
+        abort_unless(
+            $this->visibleCountCustomers($user)->contains(
+                fn (CustomerMaster $customer) => (int) $customer->customer_id === (int) $validated['customer_id'],
+            ),
+            403,
+            'This customer is outside your count scope.',
+        );
 
         $count = $this->counts->createCount(
             $employee,

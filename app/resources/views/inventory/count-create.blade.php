@@ -101,27 +101,44 @@
         @csrf
 
         <div class="m-card p-4 space-y-3">
-            <div class="grid sm:grid-cols-2 gap-3">
-                <div>
-                    <x-input-label for="customer_id" value="Stock holder / customer" />
-                    <select id="customer_id" name="customer_id" required
-                            class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
-                        <option value="">Choose customer…</option>
-                        @foreach ($customers as $c)
-                            <option value="{{ $c->customer_id }}" @selected(old('customer_id', request('customer')) === $c->customer_id)>{{ $c->business_name }} ({{ $c->customer_type->value }})</option>
-                        @endforeach
-                    </select>
+            @if ($lockedCustomer)
+                <input type="hidden" name="customer_id" value="{{ $lockedCustomer->customer_id }}">
+                <input type="hidden" name="count_type" value="{{ $lockedCountType }}">
+
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs text-on-surface-variant">Counting inventory for</p>
+                        <p class="font-semibold">{{ $lockedCustomer->business_name }}</p>
+                        <p class="text-xs text-on-surface-variant">{{ $lockedCustomer->customer_id }} · {{ $lockedCustomer->customer_type->value }}</p>
+                    </div>
+                    <span class="m-chip m-chip-active">{{ $countTypes[$lockedCountType] }}</span>
                 </div>
-                <div>
-                    <x-input-label for="count_type" value="Count type" />
-                    <select id="count_type" name="count_type" required
-                            class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
-                        @foreach ($countTypes as $value => $label)
-                            <option value="{{ $value }}" @selected(old('count_type', request('type')) === $value)>{{ $label }}</option>
-                        @endforeach
-                    </select>
+                <p class="text-xs text-on-surface-variant">
+                    Customer and count type were set from the customer page and cannot be changed here.
+                </p>
+            @else
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <div>
+                        <x-input-label for="customer_id" value="Stock holder / customer" />
+                        <select id="customer_id" name="customer_id" required
+                                class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
+                            <option value="">Choose customer…</option>
+                            @foreach ($customers as $c)
+                                <option value="{{ $c->customer_id }}" @selected((int) old('customer_id') === (int) $c->customer_id)>{{ $c->business_name }} ({{ $c->customer_type->value }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <x-input-label for="count_type" value="Count type" />
+                        <select id="count_type" name="count_type" required
+                                class="mt-1 block w-full rounded-m border-outline-variant bg-surface">
+                            @foreach ($countTypes as $value => $label)
+                                <option value="{{ $value }}" @selected(old('count_type') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
-            </div>
+            @endif
         </div>
 
         <div class="m-card p-4 space-y-3">

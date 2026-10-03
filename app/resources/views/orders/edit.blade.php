@@ -94,9 +94,13 @@
                             <input type="number" step="0.01" min="0" x-model.number="line.unitPrice"
                                    placeholder="Actual unit price" required
                                    class="w-full rounded-m border-outline-variant bg-surface">
-                            <input type="text" x-model="line.overrideReason" maxlength="255"
-                                   placeholder="Override reason (required)" required
-                                   class="w-full rounded-m border-outline-variant bg-surface">
+                            <select x-model="line.overrideReason" required
+                                    class="w-full rounded-m border-outline-variant bg-surface">
+                                <option value="">Choose override reason…</option>
+                                @foreach ($priceOverrideReasons as $reason)
+                                    <option value="{{ $reason->value }}">{{ $reason->label() }}</option>
+                                @endforeach
+                            </select>
                         </div>
                     </template>
                 </div>

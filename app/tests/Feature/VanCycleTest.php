@@ -134,7 +134,7 @@ class VanCycleTest extends TestCase
                 'qty' => $qty,
                 'unit' => 'PCS',
                 'unit_price' => $price,
-                'price_override_reason' => $price !== null ? 'VAN cycle snapshot price' : null,
+                'price_override_reason' => $price !== null ? 'SPECIAL_PRICE' : null,
             ]]),
         )['order'];
     }

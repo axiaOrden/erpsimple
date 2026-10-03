@@ -6,7 +6,7 @@ use App\Enums\Weekday;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Fixed Journey Plan: company + employee + customer + preferred visit schedule.
+ * Fixed Journey Plan: company + customer + preferred visit schedule.
  *
  * `preferred_day` is a numeric weekday index (0 = Sunday … 6 = Saturday) and
  * `preferred_week` is the rotation-week position (null = every week). The
@@ -22,7 +22,6 @@ class CustomerFjp extends Model
 
     protected $fillable = [
         'company_id',
-        'employee_id',
         'customer_id',
         'preferred_week',
         'preferred_day',
@@ -76,11 +75,6 @@ class CustomerFjp extends Model
     public function company()
     {
         return $this->belongsTo(CompanyMaster::class, 'company_id', 'company_id');
-    }
-
-    public function employee()
-    {
-        return $this->belongsTo(EmployeeMaster::class, 'employee_id', 'employee_id');
     }
 
     public function customer()

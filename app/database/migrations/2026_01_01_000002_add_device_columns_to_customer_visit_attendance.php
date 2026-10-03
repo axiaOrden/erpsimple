@@ -13,16 +13,27 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('customer_visit_attendance', function (Blueprint $table) {
-            $table->dateTime('device_captured_at')->nullable()->after('attendance_datetime');
-            $table->boolean('device_timestamp_flag')->default(false)->after('device_captured_at');
-        });
+        if (! Schema::hasColumn('customer_visit_attendance', 'device_captured_at')) {
+            Schema::table('customer_visit_attendance', function (Blueprint $table) {
+                $table->dateTime('device_captured_at')->nullable()->after('attendance_datetime');
+            });
+        }
+
+        if (! Schema::hasColumn('customer_visit_attendance', 'device_timestamp_flag')) {
+            Schema::table('customer_visit_attendance', function (Blueprint $table) {
+                $table->boolean('device_timestamp_flag')->default(false)->after('device_captured_at');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('customer_visit_attendance', function (Blueprint $table) {
-            $table->dropColumn(['device_captured_at', 'device_timestamp_flag']);
-        });
+        foreach (['device_timestamp_flag', 'device_captured_at'] as $column) {
+            if (Schema::hasColumn('customer_visit_attendance', $column)) {
+                Schema::table('customer_visit_attendance', function (Blueprint $table) use ($column) {
+                    $table->dropColumn($column);
+                });
+            }
+        }
     }
 };

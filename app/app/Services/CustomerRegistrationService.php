@@ -81,7 +81,7 @@ class CustomerRegistrationService
             $result = DB::transaction(fn () => $this->createCustomer($employee, $data, $canonical));
         } catch (QueryException $e) {
             // DB backstop: the unique canonical-phone index fired between the
-            // duplicate check and the insert (or a customer_id collision).
+            // duplicate check and the insert.
             if ($this->isDuplicatePhoneViolation($e)) {
                 return [
                     'customer' => null,
@@ -135,65 +135,32 @@ class CustomerRegistrationService
         return null;
     }
 
-    /** Next customer id in the CUS-XXXXXX form used across the application. */
-    public function nextCustomerId(): string
-    {
-        $max = CustomerMaster::where('customer_id', 'like', 'CUS-%')->max('customer_id');
-
-        $seq = $max !== null && preg_match('/^CUS-(\d+)$/', (string) $max, $m) === 1
-            ? ((int) $m[1]) + 1
-            : 1;
-
-        return 'CUS-'.str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
-    }
-
     /** @return array{customer: CustomerMaster, duplicate: null, visits: array<int, CustomerFjp>, matches_today: bool} */
     private function createCustomer(EmployeeMaster $employee, array $data, ?string $canonical): array
     {
-        $customer = null;
-
-        // customer_id collisions are possible with concurrent registrations
-        // (the sequence is derived from max, not from a counter).
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            try {
-                $customer = CustomerMaster::create([
-                    'customer_id' => $this->nextCustomerId(),
-                    'business_name' => $data['business_name'],
-                    'customer_type' => CustomerType::SECONDARY, // server-set, never client-supplied
-                    'parent_customer_id' => null,
-                    'contact_person' => $data['contact_person'] ?? null,
-                    'phone_number' => $canonical,
-                    'phone_canonical' => $canonical,
-                    'gps_latitude' => $data['gps_latitude'],   // device capture, server-validated
-                    'gps_longitude' => $data['gps_longitude'],
-                    'address' => $data['address'] ?? null,
-                    'address2' => $data['address2'] ?? null,
-                    'state' => $data['state'] ?? null,
-                    'city' => $data['city'] ?? null,
-                    'postal_code' => $data['postal_code'] ?? null,
-                    'country' => $this->phones->countryName(), // locked to the configured country
-                    'sales_region' => $data['sales_region'] ?? null,
-                    'market' => $data['market'] ?? null,
-                    'active' => true,
-                ]);
-
-                break;
-            } catch (QueryException $e) {
-                if ($this->isDuplicatePhoneViolation($e)) {
-                    throw $e; // outer handler turns this into the duplicate prompt
-                }
-
-                if ($this->isDuplicateCustomerIdViolation($e) && $attempt < 4) {
-                    continue;
-                }
-
-                throw $e;
-            }
+        if ($employee->region_code === null || $employee->region_code === '') {
+            abort(422, 'Your employee placement must have a sales region before registering customers.');
         }
 
-        if ($customer === null) {
-            abort(422, 'Could not allocate a customer id. Try again.');
-        }
+        $customer = CustomerMaster::create([
+            'business_name' => $data['business_name'],
+            'customer_type' => CustomerType::SECONDARY, // server-set, never client-supplied
+            'parent_customer_id' => null,
+            'contact_person' => $data['contact_person'] ?? null,
+            'phone_number' => $canonical,
+            'phone_canonical' => $canonical,
+            'gps_latitude' => $data['gps_latitude'],   // device capture, server-validated
+            'gps_longitude' => $data['gps_longitude'],
+            'address' => $data['address'] ?? null,
+            'address2' => $data['address2'] ?? null,
+            'state' => $data['state'] ?? null,
+            'city' => $data['city'] ?? null,
+            'postal_code' => $data['postal_code'] ?? null,
+            'country' => $this->phones->countryName(), // locked to the configured country
+            'sales_region' => $employee->region_code,
+            'market' => $data['market'] ?? null,
+            'active' => true,
+        ]);
 
         // The registering employee owns the relationship (existing model).
         CustomerEmployee::create([
@@ -257,7 +224,6 @@ class CustomerRegistrationService
 
             $created[] = CustomerFjp::create([
                 'company_id' => $employee->company_id,
-                'employee_id' => $employee->employee_id,
                 'customer_id' => $customer->customer_id,
                 'preferred_week' => $week,
                 'preferred_day' => $day,
@@ -313,11 +279,5 @@ class CustomerRegistrationService
     {
         return (int) ($e->errorInfo[1] ?? 0) === 1062
             && str_contains((string) ($e->errorInfo[2] ?? ''), 'uq_cm_phone_canonical');
-    }
-
-    private function isDuplicateCustomerIdViolation(QueryException $e): bool
-    {
-        return (int) ($e->errorInfo[1] ?? 0) === 1062
-            && str_contains((string) ($e->errorInfo[2] ?? ''), 'PRIMARY');
     }
 }

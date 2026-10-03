@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CustomerType;
+use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
+use App\Services\CompanyContext;
 use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
+    public function __construct(private readonly CompanyContext $companyContext) {}
+
     public function index(Request $request)
     {
         $this->authorize('viewAny', CustomerMaster::class);
@@ -19,6 +23,7 @@ class CustomerController extends Controller
             ->when($q, fn ($query) => $query->where(function ($w) use ($q) {
                 $w->where('business_name', 'like', "%{$q}%")
                     ->orWhere('customer_id', 'like', "%{$q}%")
+                    ->orWhere('ext_origin_id', 'like', "%{$q}%")
                     ->orWhere('city', 'like', "%{$q}%");
             }))
             ->when($type, fn ($query) => $query->where('customer_type', $type))
@@ -45,15 +50,39 @@ class CustomerController extends Controller
         ]);
     }
 
+    public function show(CustomerMaster $customer)
+    {
+        $this->authorize('view', $customer);
+
+        $companyId = (string) $this->companyContext->companyId();
+        $isAssignedWithinCompany = $customer->employees()
+            ->where('employee_master.company_id', $companyId)
+            ->exists();
+
+        return view('customers.show', [
+            'customer' => $customer->load('salesRegion'),
+            'companyId' => $companyId,
+            'isAssignedWithinCompany' => $isAssignedWithinCompany,
+            'plan' => CustomerFjp::query()
+                ->forCompany($companyId)
+                ->where('customer_id', $customer->customer_id)
+                ->orderByRaw('preferred_week IS NULL')
+                ->orderBy('preferred_week')
+                ->orderBy('preferred_day')
+                ->get(),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $this->authorize('create', CustomerMaster::class);
 
         $validated = $request->validate([
-            'customer_id' => ['required', 'string', 'max:50', 'unique:customer_master,customer_id'],
             'business_name' => ['required', 'string', 'max:255'],
             'customer_type' => ['required', 'in:PRIMARY,SECONDARY,VAN,SHIP_TO'],
             'parent_customer_id' => ['nullable', 'exists:customer_master,customer_id'],
+            'ext_origin_id' => ['nullable', 'string', 'max:100'],
+            'ext_origin_company' => ['nullable', 'string', 'max:100'],
             'contact_person' => ['nullable', 'string', 'max:255'],
             'phone_number' => ['nullable', 'string', 'max:50'],
             'email_address' => ['nullable', 'email', 'max:255'],
@@ -115,6 +144,8 @@ class CustomerController extends Controller
                     }
                 },
             ],
+            'ext_origin_id' => ['nullable', 'string', 'max:100'],
+            'ext_origin_company' => ['nullable', 'string', 'max:100'],
             'contact_person' => ['nullable', 'string', 'max:255'],
             'phone_number' => ['nullable', 'string', 'max:50'],
             'email_address' => ['nullable', 'email', 'max:255'],

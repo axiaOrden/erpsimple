@@ -8,6 +8,7 @@ use App\Models\EmployeeProduct;
 use App\Models\Inventory;
 use App\Models\SalesOrder;
 use App\Services\DeliveryService;
+use App\Services\ProductUnitService;
 use App\Services\SyncService;
 use App\Services\TransitService;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class DeliveryController extends Controller
         private readonly DeliveryService $deliveries,
         private readonly SyncService $sync,
         private readonly TransitService $transit,
+        private readonly ProductUnitService $units,
     ) {}
 
     /** Allocate form: ordered / allocated / remaining / availability per line. */
@@ -42,21 +44,30 @@ class DeliveryController extends Controller
         $employee = $user->employee;
 
         $transitBalances = collect();
+        $transitOrderBalances = collect();
+        $lines = $this->deliveries->allocationContext($order);
 
         if ($employee !== null) {
-            foreach ($order->items->pluck('product_id')->unique() as $productId) {
-                $transitBalances[$productId] = $this->transit->reusableBalance(
+            foreach ($lines as $line) {
+                $transitBasic = $this->transit->reusableBalance(
                     $employee->employee_id,
-                    $productId,
+                    $line['product_id'],
                     $order->source_customer_id,
+                );
+                $transitBalances[$line['product_id']] = $transitBasic;
+                $transitOrderBalances[$line['item_no']] = $this->units->fromBasicById(
+                    $line['product_id'],
+                    $transitBasic,
+                    $line['order_unit'],
                 );
             }
         }
 
         return view('deliveries.create', [
             'order' => $order,
-            'lines' => $this->deliveries->allocationContext($order),
+            'lines' => $lines,
             'transitBalances' => $transitBalances,
+            'transitOrderBalances' => $transitOrderBalances,
             'inventory' => Inventory::where('customer_id', $order->source_customer_id)
                 ->whereIn('product_id', $order->items->pluck('product_id'))
                 ->get()

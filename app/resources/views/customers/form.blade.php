@@ -13,15 +13,6 @@
         @endif
 
         <div class="m-card p-6 space-y-4">
-            @unless ($customer->exists)
-                <div>
-                    <x-input-label for="customer_id" value="Customer ID" />
-                    <x-text-input id="customer_id" name="customer_id" type="text" class="mt-1 block w-full"
-                                  value="{{ old('customer_id') }}" required maxlength="50" placeholder="e.g. MIMZA" />
-                    <x-input-error :messages="$errors->get('customer_id')" class="mt-2" />
-                </div>
-            @endunless
-
             <div>
                 <x-input-label for="business_name" value="Business name" />
                 <x-text-input id="business_name" name="business_name" type="text" class="mt-1 block w-full"
@@ -63,6 +54,21 @@
                 No fixed Primary → Secondary relationship exists in the data model; the commercial
                 link is the employee assignment. SHIP_TO is the only typed parent relationship.
             </p>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                    <x-input-label for="ext_origin_id" value="External origin ID (optional)" />
+                    <x-text-input id="ext_origin_id" name="ext_origin_id" type="text" class="mt-1 block w-full"
+                                  value="{{ old('ext_origin_id', $customer->ext_origin_id) }}" maxlength="100" />
+                    <x-input-error :messages="$errors->get('ext_origin_id')" class="mt-2" />
+                </div>
+                <div>
+                    <x-input-label for="ext_origin_company" value="External origin company (optional)" />
+                    <x-text-input id="ext_origin_company" name="ext_origin_company" type="text" class="mt-1 block w-full"
+                                  value="{{ old('ext_origin_company', $customer->ext_origin_company) }}" maxlength="100" />
+                    <x-input-error :messages="$errors->get('ext_origin_company')" class="mt-2" />
+                </div>
+            </div>
         </div>
 
         <div class="m-card p-6 space-y-4">

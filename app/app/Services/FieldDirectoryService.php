@@ -91,10 +91,9 @@ class FieldDirectoryService
      * optionally filtered by search, each with the visit summary. Customers
      * already checked in today are included — their status shows the progress.
      *
-     * SCOPING (mandatory): the schedule must belong to THIS logged-in employee,
-     * THIS employee's company, THIS customer, and be ACTIVE. A customer may
-     * carry FJP rows for several companies/employees, so a row from another
-     * company is never shown to this employee.
+     * SCOPING (mandatory): the schedule belongs to THIS employee's company and
+     * an assigned customer. Colleagues in the same company share the customer's
+     * preferred schedule, but do not gain access to unassigned customers.
      *
      * @return array{rows: Collection<int, array<string, mixed>>, total: int, paginator: LengthAwarePaginator}
      */
@@ -268,8 +267,8 @@ class FieldDirectoryService
 
     /**
      * The ONE scoping rule for every FJP read a field employee makes:
-     * employee + employee company + active rows. A customer can have schedules
-     * for several companies — another company's row is never returned here.
+     * employee company + assigned customers + active rows. A customer can have
+     * schedules for several companies; another company's row is never returned.
      *
      * @return Builder<CustomerFjp>
      */
@@ -277,14 +276,13 @@ class FieldDirectoryService
     {
         return CustomerFjp::query()
             ->where('company_id', $employee->company_id)
-            ->where('employee_id', $employee->employee_id)
+            ->whereIn('customer_id', $this->assignedCustomerIds($employee))
             ->where('active', true)
             ->when($customerId !== null, fn ($q) => $q->where('customer_id', $customerId));
     }
 
     /**
-     * One customer's active preferred-visit rows for THIS employee, ordered for
-     * display (week first, then weekday).
+     * One assigned customer's company-level preferred visits, ordered for display.
      *
      * @return Collection<int, CustomerFjp>
      */

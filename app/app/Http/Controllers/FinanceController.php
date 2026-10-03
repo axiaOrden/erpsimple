@@ -37,9 +37,15 @@ class FinanceController extends Controller
 
     public function invoices(Request $request)
     {
+        $invoices = $this->scopedInvoices($request->user());
+
+        if ($request->query('status') === 'outstanding') {
+            $invoices->whereIn('payment_status', ['UNPAID', 'PARTIALLY_PAID']);
+        }
+
         return view('finance.invoices', [
-            'invoices' => $this->scopedInvoices($request->user())
-                ->orderByDesc('invoice_date')->orderByDesc('invoice_no')->paginate(20)->withQueryString(),
+            'invoices' => $invoices->orderByDesc('invoice_date')->orderByDesc('invoice_no')->paginate(20)->withQueryString(),
+            'outstandingOnly' => $request->query('status') === 'outstanding',
         ]);
     }
 

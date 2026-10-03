@@ -1,0 +1,204 @@
+company_id,employee_id,employee_name,region_code,email,partner_function,partner_id,created_at,updated_at
+EMANL,133101011,Owete Chukwuemeke,NGR004,owete.chukwuemeke@euro-mega.com,ASM,19160407,7/15/2026 11:26,7/15/2026 11:26
+EMANL,154011211,Ahmad Bello Babalola,NGR008,ahmad.bello.babalola@euro-mega.com,SE,31340918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,182010212,Rilwanu Bello,NGR008,rilwanu.bello@euro-mega.com,SE,27730316,7/15/2026 11:26,9/18/2026 12:46
+EMANL,185010212,Ibrahim Sanni Yunusa,NGR006,ibrahim.sanni.yunusa@euro-mega.com,SP,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19130407,Bello Olugbenga Ebenezer,NGR005,bello.olugbenga.ebenezer@euro-mega.com,SE,27550116,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19160407,Adekunle Abioye,NGR004,adekunle.abioye@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19210407,Emeka Nwoke,NGR009,emeka.nwoke@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19230407,Edeh Bertram,NGR004,edeh.bertram@euro-mega.com,SP,33260820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19320708,Sabastine,NGR009,sabastine@euro-mega.com,SP,21730813,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19530209,Thomas Ahungwa,NGR003,thomas.ahungwa@euro-mega.com,SP,33420820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19540209,Funmilayo Ayeni,NGR003,funmilayo.ayeni@euro-mega.com,SE,43111224,7/15/2026 11:26,9/18/2026 12:46
+EMANL,19560709,Bernard Obinna Nnadi,NGR007,bernard.obinna.nnadi@euro-mega.com,SE,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19591109,Didigwu Sabastine Ogbonna,NGR009,didigwu.sabastine.ogbonna@euro-mega.com,SE,23040714,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19670310,Omitunde Kehinde Ruth,NGR005,omitunde.kehinde.ruth@euro-mega.com,SE,41721023,7/15/2026 11:26,9/18/2026 12:46
+EMANL,19690310,Ezeoyili Godwin Chukwuma,NGR009,ezeoyili.godwin.chukwuma@euro-mega.com,SE,23040714,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19790111,OKEKE MICHAEL IFEANYI,NGR007,okeke.michael.ifeanyi@euro-mega.com,ASM,22710514,7/15/2026 11:26,7/15/2026 11:26
+EMANL,19820111,Paul chikodi Ajima,NGR002,paul.chikodi.ajima@euro-mega.com,SE,257060409,7/15/2026 11:26,9/18/2026 12:46
+EMANL,19830111,Nura Bello,NGR006,nura.bello@euro-mega.com,RSM,,7/15/2026 11:26,7/16/2026 14:04
+EMANL,19891311,Martins Egwuenu,NGR006,martins.egwuenu@euro-mega.com,ASM,19830111,7/15/2026 11:26,7/16/2026 14:04
+EMANL,20131011,Loveth Chukwuma,NGR004,loveth.chukwuma@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,20540312,Ishaku Mairabo Dibal,NGR002,ishaku.mairabo.dibal@euro-mega.com,SE,257060409,7/15/2026 11:26,9/18/2026 12:46
+EMANL,20780812,Alice Ene Emmanuel,NGR002,alice.ene.emmanuel@euro-mega.com,SP,20800812,7/15/2026 11:26,7/15/2026 11:26
+EMANL,20800812,Haruna Said Mohammed,NGR002,haruna.said.mohammed@euro-mega.com,SE,257060409,7/15/2026 11:26,9/18/2026 12:46
+EMANL,21480513,Micheal Jacob,NGR002,micheal.jacob@euro-mega.com,SE,369230511,7/15/2026 11:26,7/15/2026 11:26
+EMANL,21530513,Lawal Yinusa Ademola,NGR005,lawal.yinusa.ademola@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,21660713,Abiodun Julius,NGR006,abiodun.julius@euro-mega.com,SE,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,21730813,Augustine Ndubueze,NGR009,augustine.ndubueze@euro-mega.com,SE,23040714,7/15/2026 11:26,7/15/2026 11:26
+EMANL,21750813,Sharon franklin,NGR004,sharon.franklin@euro-mega.com,SP,20131011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,21800913,Peter Akinmoji,NGR005,peter.akinmoji@euro-mega.com,SE,27550116,7/16/2026 14:04,9/18/2026 12:46
+EMANL,222010908,Alexander imotobhebhe,NGR004,alexander.imotobhebhe@euro-mega.com,SP,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,22240114,Nasiru Jibril,NGR003,nasiru.jibril@euro-mega.com,SE,43111224,7/15/2026 11:26,7/16/2026 12:07
+EMANL,22250114,Obinna Aham Okoroafor,NGR007,obinna.aham.okoroafor@euro-mega.com,SE,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,22280214,David Onyeka paul,NGR002,david.onyeka.paul@euro-mega.com,SP,19820111,7/15/2026 11:26,7/15/2026 11:26
+EMANL,22430514,Nwankwo Cecilia Ogonna,NGR004,nwankwo.cecilia.ogonna@euro-mega.com,SP,32520620,7/15/2026 11:26,7/15/2026 11:26
+EMANL,227011008,Friday Ukaegbulem Usuoha,NGR004,friday.ukaegbulem.usuoha@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,22710514,PETER CHIDIEBERE ONWE,NGR007,peter.chidiebere.onwe@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,228011008,Nwosu Joseph Chigozie,NGR004,nwosu.joseph.chigozie@euro-mega.com,SP,227011008,9/18/2026 12:46,9/18/2026 12:46
+EMANL,23020714,Fatugbayi Akinola Samuel,NGR001,fatugbayi.akinola.samuel@euro-mega.com,SE,34870421,7/15/2026 11:26,7/15/2026 11:26
+EMANL,23040714,Isienyi Charles Sunday,NGR009,isienyi.charles.sunday@euro-mega.com,ASM,19210407,7/15/2026 11:26,7/15/2026 11:26
+EMANL,23101114,Oche Maria Aladi,NGR001,oche.maria.aladi@euro-mega.com,SP,30490118,7/15/2026 11:26,7/15/2026 11:26
+EMANL,23120714,Nkeiruka Chineye Ejimofor,NGR001,nkeiruka.chineye.ejimofor@euro-mega.com,SE,38090522,7/15/2026 11:26,7/15/2026 11:26
+EMANL,23730914,Binanu Kadiri,NGR001,binanu.kadiri@euro-mega.com,SE,38090522,7/15/2026 11:26,7/15/2026 11:26
+EMANL,23801014,Ogu Peter Uche,NGR007,ogu.peter.uche@euro-mega.com,SP,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,24181114,CHUKWUEBUKA SAMUEL ENEMUO,NGR007,chukwuebuka.samuel.enemuo@euro-mega.com,ASM,22710514,7/15/2026 11:26,7/15/2026 11:26
+EMANL,24231114,Baffa Saifullahi Idris,NGR003,baffa.saifullahi.idris@euro-mega.com,SE,43111224,7/15/2026 11:26,7/16/2026 12:10
+EMANL,24560115,Ishola Abdulkarim Atanda,NGR001,ishola.abdulkarim.atanda@euro-mega.com,SP,24860115,7/15/2026 11:26,9/18/2026 12:46
+EMANL,24580115,Mabel Anurika,NGR004,mabel.anurika@euro-mega.com,SP,227011008,7/15/2026 11:26,9/18/2026 12:46
+EMANL,24780115,Olawale Raufu Lawal,NGR001,olawale.raufu.lawal@euro-mega.com,SE,38090522,7/15/2026 11:26,7/15/2026 11:26
+EMANL,24820116,Abosede Wusu,NGR001,abosede.wusu@euro-mega.com,SP,23020714,7/15/2026 11:26,7/15/2026 11:26
+EMANL,24860115,Christopher Ehichioya Edede,NGR001,christopher.ehichioya.edede@euro-mega.com,SE,38090522,7/15/2026 11:26,7/15/2026 11:26
+EMANL,25090115,Saliu,NGR001,saliu@euro-mega.com,SP,30490118,7/15/2026 11:26,7/15/2026 11:26
+EMANL,25320215,Bashir Bulama,NGR002,bashir.bulama@euro-mega.com,SP,20540312,7/15/2026 11:26,7/15/2026 11:26
+EMANL,25390215,Uko Omirigbe Linus,NGR005,uko.omirigbe.linus@euro-mega.com,SE,41721023,7/15/2026 11:26,9/18/2026 12:46
+EMANL,257060409,Ologundudu Joseph Idowu,NGR002,ologundudu.joseph.idowu@euro-mega.com,ASM,369230511,7/15/2026 11:26,7/15/2026 11:26
+EMANL,25780315,Okonkwo Ukamaka,NGR004,okonkwo.ukamaka@euro-mega.com,SP,227011008,7/15/2026 11:26,9/18/2026 12:46
+EMANL,26151121,Musa Ahmad,NGR008,musa.ahmad@euro-mega.com,SP,154011211,7/15/2026 11:26,7/15/2026 11:26
+EMANL,26920915,Peter Aibe Tsebam,NGR006,peter.aibe.tsebam@euro-mega.com,SP,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,27550116,Alo Oluseyi Samuel,NGR005,alo.oluseyi.samuel@euro-mega.com,ASM,40230123,7/15/2026 11:26,7/15/2026 11:26
+EMANL,27610116,Cyril,NGR009,cyril@euro-mega.com,SP,19690310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,27730316,Inuwa Umar Kurawa,NGR008,inuwa.umar.kurawa@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,27990616,Femi Akande,NGR008,femi.akande@euro-mega.com,SE,31340918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,28020616,Abubakar Adamu,NGR002,abubakar.adamu@euro-mega.com,ASM,369230511,7/15/2026 11:26,7/15/2026 11:26
+EMANL,28080616,Oyelusi Kayode Sunday,NGR003,oyelusi.kayode.sunday@euro-mega.com,SE,43111224,7/15/2026 11:26,7/16/2026 12:07
+EMANL,28280716,Clementina Chinenye Obagu,NGR007,clementina.chinenye.obagu@euro-mega.com,SP,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,28320816,Cherechi Nnenna Emmanuel,NGR007,cherechi.nnenna.emmanuel@euro-mega.com,SP,24181114,7/15/2026 11:26,9/18/2026 12:46
+EMANL,28340816,Chukwuma Anthony Ezenwata,NGR007,chukwuma.anthony.ezenwata@euro-mega.com,SP,35620721,7/15/2026 11:26,7/15/2026 11:26
+EMANL,28601116,Andrew Okoronkwo,NGR007,andrew.okoronkwo@euro-mega.com,SE,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,29530217,Munirat Abosede Makusota,NGR001,munirat.abosede.makusota@euro-mega.com,SP,24860115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,30090817,Stephanie Anurika Olewunne,NGR007,stephanie.anurika.olewunne@euro-mega.com,SP,24181114,7/15/2026 11:26,9/18/2026 12:46
+EMANL,30490118,Okolie Scholastica Chinelo,NGR001,okolie.scholastica.chinelo@euro-mega.com,SE,34870421,7/15/2026 11:26,7/15/2026 11:26
+EMANL,31120718,Kabiru Aliyu,NGR003,kabiru.aliyu@euro-mega.com,SP,33420820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,31190818,Olumorokun idowu iyilomo,NGR001,olumorokun.idowu.iyilomo@euro-mega.com,SP,35950921,7/20/2026 17:28,9/18/2026 12:46
+EMANL,31340918,Sani Ibrahim,NGR008,sani.ibrahim@euro-mega.com,ASM,27730316,7/15/2026 11:26,7/15/2026 11:26
+EMANL,31370918,Kamal Yunusa Yakubu,NGR002,kamal.yunusa.yakubu@euro-mega.com,SE,257060409,7/15/2026 11:26,9/18/2026 12:46
+EMANL,31441018,David,NGR009,david@euro-mega.com,SP,23040714,7/15/2026 11:26,9/18/2026 12:46
+EMANL,32520620,Ogedegbe Uyiosa Shirley,NGR004,ogedegbe.uyiosa.shirley@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,3258020,Gafar Azeezat Tanimola,NGR001,gafar.azeezat.tanimola@euro-mega.com,SP,24860115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,32720820,Ugwuala Mercy Chinedu,NGR001,ugwuala.mercy.chinedu@euro-mega.com,SP,23730914,7/15/2026 11:26,7/15/2026 11:26
+EMANL,32770820,Oluwakemi Adijat Shittu,NGR001,oluwakemi.adijat.shittu@euro-mega.com,SP,24780115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,32840820,Omotola Inaolaji,NGR005,omotola.inaolaji@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,32900820,Damilola Durodola,NGR005,damilola.durodola@euro-mega.com,SP,41751023,7/15/2026 11:26,7/15/2026 11:26
+EMANL,32920820,Sule Aliu Jeremiah,NGR005,sule.aliu.jeremiah@euro-mega.com,SP,21800913,7/15/2026 11:26,9/18/2026 12:46
+EMANL,32930820,Adeyeye Oyewumi Alabi,NGR005,adeyeye.oyewumi.alabi@euro-mega.com,SP,21800913,7/15/2026 11:26,9/18/2026 12:46
+EMANL,32960820,Segun Ojelabi,NGR006,segun.ojelabi@euro-mega.com,SP,42071123,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33000820,Onwukwe Hamilton,NGR007,onwukwe.hamilton@euro-mega.com,SP,22250114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33010820,Ndidiamaka Okoh Alice,NGR007,ndidiamaka.okoh.alice@euro-mega.com,SP,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33110820,Ezikeuke Geraldine,NGR007,ezikeuke.geraldine@euro-mega.com,SP,19790111,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33130820,Udoh Uduak Ekaetor,NGR007,udoh.uduak.ekaetor@euro-mega.com,SP,28601116,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33150820,Samuel Nsikak,NGR007,samuel.nsikak@euro-mega.com,SP,28601116,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33240820,Okonkwo Adaobi,NGR004,okonkwo.adaobi@euro-mega.com,SP,33250822,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33250820,Okolie Juliet Chinyere,NGR004,okolie.juliet.chinyere@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33250822,Ibeh Juliet Chinyere,NGR004,ibeh.juliet.chinyere@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33260820,Chukwuemeka James,NGR004,chukwuemeka.james@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33360820,Joseph Nwanli,NGR004,joseph.nwanli@euro-mega.com,SE,133101011,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33380820,Odo Ijeoma Vivian,NGR004,odo.ijeoma.vivian@euro-mega.com,SP,32520620,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33420820,Aminu Haladu,NGR003,aminu.haladu@euro-mega.com,SE,43111224,7/15/2026 11:26,7/16/2026 12:07
+EMANL,33520820,Basiru Sani,NGR003,basiru.sani@euro-mega.com,SP,358010211,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33530820,Muhammed Keturah,NGR002,muhammed.keturah@euro-mega.com,SE,257060409,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33540820,Lukmam Yahaya,NGR002,lukmam.yahaya@euro-mega.com,SP,257060409,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33550820,Yusuf Yusuf Adam,NGR002,yusuf.yusuf.adam@euro-mega.com,SP,28020616,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33560820,Abdulrauf Yunusa,NGR008,abdulrauf.yunusa@euro-mega.com,SP,182010212,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33570820,Emmanuel Odeh,NGR008,emmanuel.odeh@euro-mega.com,SE,27730316,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33590820,Deborah Samson,NGR005,deborah.samson@euro-mega.com,SP,25390215,7/15/2026 11:26,7/16/2026 14:04
+EMANL,33620820,Abdulmajid Isa,NGR008,abdulmajid.isa@euro-mega.com,SP,33710820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33630820,Halima Sadiya Yusuf,NGR008,halima.sadiya.yusuf@euro-mega.com,SP,31340918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33640820,Muktar Iliyasu,NGR008,muktar.iliyasu@euro-mega.com,SP,27990616,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33650820,Umar Usman,NGR008,umar.usman@euro-mega.com,SP,33570820,7/15/2026 11:26,9/18/2026 12:46
+EMANL,33710820,Faisal Idris,NGR008,faisal.idris@euro-mega.com,SE,31340918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33720820,Abba Salisu,NGR008,abba.salisu@euro-mega.com,SP,27990616,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33750820,Agaku Terhide,NGR006,agaku.terhide@euro-mega.com,SP,21660713,7/15/2026 11:26,7/15/2026 11:26
+EMANL,33860820,Josephine,NGR009,josephine@euro-mega.com,SP,23040714,7/15/2026 11:26,9/18/2026 12:46
+EMANL,34121020,Kairma mohammed,NGR002,kairma.mohammed@euro-mega.com,SP,31370918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,343012220,Nura Umar,NGR003,nura.umar@euro-mega.com,SP,22240114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34490221,Adeagbo Folashade Tosin,NGR005,adeagbo.folashade.tosin@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34650321,Askarju Bodi,NGR002,askarju.bodi@euro-mega.com,SP,33530820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34660321,Augustine Aniaku Nzutigbo,NGR004,augustine.aniaku.nzutigbo@euro-mega.com,SP,42950824,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34700321,Waheed Idris,NGR005,waheed.idris@euro-mega.com,SP,19130407,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34730321,Kabir Umar,NGR008,kabir.umar@euro-mega.com,SP,182010212,7/15/2026 11:26,9/18/2026 12:46
+EMANL,34870421,Adeneye James Abayomi,NGR001,adeneye.james.abayomi@euro-mega.com,ASM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,34910421,Stanley,NGR009,stanley@euro-mega.com,SP,19690310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,35330621,Umar Idris,NGR003,umar.idris@euro-mega.com,SP,33420820,7/15/2026 11:26,9/18/2026 12:46
+EMANL,35620721,Onyenekwu Nzubechukwu Emmanuel,NGR007,onyenekwu.nzubechukwu.emmanuel@euro-mega.com,SE,19790111,7/15/2026 11:26,7/15/2026 11:26
+EMANL,35650721,Aminu Abdul Aziz,NGR003,aminu.abdul.aziz@euro-mega.com,SP,28080616,7/15/2026 11:26,7/15/2026 11:26
+EMANL,358010211,Egwuenu Efeanyi Emmanuel,NGR003,egwuenu.efeanyi.emmanuel@euro-mega.com,SE,43111224,7/15/2026 11:26,7/16/2026 12:07
+EMANL,35950921,Adesola Isaac Adeyemi,NGR001,adesola.isaac.adeyemi@euro-mega.com,SE,34870421,7/15/2026 11:26,7/15/2026 11:26
+EMANL,35970921,Ifeoma Ogbonna,NGR004,ifeoma.ogbonna@euro-mega.com,SP,42950824,7/15/2026 11:26,7/15/2026 11:26
+EMANL,36177016,Oladosu Ifeoluwa Mary,NGR005,oladosu.ifeoluwa.mary@euro-mega.com,SP,21800913,9/18/2026 12:46,9/18/2026 12:46
+EMANL,36221021,Stella  Eki,NGR004,stella..eki@euro-mega.com,SP,20131011,7/15/2026 11:26,7/16/2026 14:04
+EMANL,36571221,Akinkunloye Oluwatosin,NGR001,akinkunloye.oluwatosin@euro-mega.com,SP,24860115,7/15/2026 11:26,7/16/2026 14:04
+EMANL,36601221,Afolabi Oluwaseun,NGR001,afolabi.oluwaseun@euro-mega.com,SP,24860115,7/15/2026 11:26,7/16/2026 14:04
+EMANL,36670122,Oladosu Ifeoluwa,NGR005,oladosu.ifeoluwa@euro-mega.com,SP,21800913,7/15/2026 11:26,7/16/2026 14:04
+EMANL,36760122,Bassey Ifeoma,NGR004,bassey.ifeoma@euro-mega.com,SP,33250822,7/15/2026 11:26,7/15/2026 11:26
+EMANL,36870122,Muhammad Lawal,NGR008,muhammad.lawal@euro-mega.com,SP,31340918,7/15/2026 11:26,7/15/2026 11:26
+EMANL,369230511,Ayorinde Olaniyan,NGR002,ayorinde.olaniyan@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,37030222,Abumchukwu,NGR009,abumchukwu@euro-mega.com,SP,21730813,7/15/2026 11:26,7/15/2026 11:26
+EMANL,37050222,Mubarak Abubakar,NGR008,mubarak.abubakar@euro-mega.com,SP,44410626,7/15/2026 11:26,9/18/2026 12:46
+EMANL,37060222,Haruna Ibrahim,NGR006,haruna.ibrahim@euro-mega.com,SP,43330425,7/15/2026 11:26,7/15/2026 11:26
+EMANL,37080222,Hassan Ibrahim,NGR003,hassan.ibrahim@euro-mega.com,SP,22240114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,37330322,Nwaolisa Theresa Amarachi,NGR001,nwaolisa.theresa.amarachi@euro-mega.com,SP,24780115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,373603322,Ephraim Yakubu,NGR002,ephraim.yakubu@euro-mega.com,SP,21480513,7/15/2026 11:26,7/15/2026 11:26
+EMANL,37450322,ANIEMEKA IFEOMA,NGR004,aniemeka.ifeoma@euro-mega.com,SP,33360820,7/15/2026 11:26,9/18/2026 12:46
+EMANL,37740422,Jacob Samuel,NGR007,jacob.samuel@euro-mega.com,SP,19560709,7/15/2026 11:26,7/15/2026 11:26
+EMANL,38090522,Bashir Mutiu Adewale,NGR001,bashir.mutiu.adewale@euro-mega.com,ASM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,39060922,Obasa Ayomikun Rukayat,NGR005,obasa.ayomikun.rukayat@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,39100922,Chukwuka Arinze Chukwuma,NGR007,chukwuka.arinze.chukwuma@euro-mega.com,SP,24181114,7/15/2026 11:26,9/18/2026 12:46
+EMANL,39120922,Obiora,NGR009,obiora@euro-mega.com,SP,19591109,7/15/2026 11:26,7/15/2026 11:26
+EMANL,39461022,Aliyu Muhammad,NGR003,aliyu.muhammad@euro-mega.com,SP,358010211,7/15/2026 11:26,7/15/2026 11:26
+EMANL,39481022,Rita,NGR009,rita@euro-mega.com,SP,23040714,7/15/2026 11:26,9/18/2026 12:46
+EMANL,39631022,Sarah Paul Shemang,NGR003,sarah.paul.shemang@euro-mega.com,SP,33420820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,39731122,Amarachi,NGR009,amarachi@euro-mega.com,SP,23040714,7/15/2026 11:26,9/18/2026 12:46
+EMANL,40230123,Olayinka Oriyomi Adegoke,NGR005,olayinka.oriyomi.adegoke@euro-mega.com,RSM,,7/15/2026 11:26,7/15/2026 11:26
+EMANL,40380223,Taiwo Rinde Tunde,NGR007,taiwo.rinde.tunde@euro-mega.com,SP,24181114,7/15/2026 11:26,9/18/2026 12:46
+EMANL,405150514,Chijioke Blessing Chioma,NGR004,chijioke.blessing.chioma@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,40740323,Justice Ezenwa,NGR004,justice.ezenwa@euro-mega.com,SP,42950824,7/15/2026 11:26,7/15/2026 11:26
+EMANL,40920423,Olaniyi Olamide Rasheed,NGR005,olaniyi.olamide.rasheed@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,41080523,Jecinta Okoye,NGR004,jecinta.okoye@euro-mega.com,SP,33250822,7/15/2026 11:26,7/15/2026 11:26
+EMANL,41380823,Yakubu Ezra,NGR002,yakubu.ezra@euro-mega.com,SP,28020616,7/15/2026 11:26,7/15/2026 11:26
+EMANL,41530923,Sunday Nkeh,NGR009,sunday.nkeh@euro-mega.com,SP,21730813,7/16/2026 14:04,9/18/2026 12:46
+EMANL,41540923,Orji Jane,NGR001,orji.jane@euro-mega.com,SP,35950921,7/15/2026 11:26,7/15/2026 11:26
+EMANL,41721023,Muyiwa Ogunleye,NGR005,muyiwa.ogunleye@euro-mega.com,ASM,40230123,9/18/2026 12:46,9/18/2026 12:46
+EMANL,41751023,Lamidi Sarafa Olaitan,NGR005,lamidi.sarafa.olaitan@euro-mega.com,SE,41721023,7/15/2026 11:26,9/18/2026 12:46
+EMANL,41791023,Esther Onyedikachukwu,NGR004,esther.onyedikachukwu@euro-mega.com,SP,33260820,7/15/2026 11:26,9/18/2026 12:46
+EMANL,41801023,Ibiam Regina Egwu,NGR004,ibiam.regina.egwu@euro-mega.com,SP,405150514,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42071123,Bose Rebecca Akpata,NGR006,bose.rebecca.akpata@euro-mega.com,SE,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42171123,Adepoju Elizabeth Omowunmi,NGR005,adepoju.elizabeth.omowunmi@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42191123,Sadiq Abdulbashir,NGR008,sadiq.abdulbashir@euro-mega.com,SP,33710820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42201123,Ofomata,NGR009,ofomata@euro-mega.com,SP,19690310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42211223,Akinnadeju Sunday,NGR005,akinnadeju.sunday@euro-mega.com,SP,21800913,7/15/2026 11:26,7/16/2026 14:04
+EMANL,42291225,Uzochi Moses Umesi,NGR007,uzochi.moses.umesi@euro-mega.com,SP,22250114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42410124,Onyirimba Oluchi Nancy,NGR007,onyirimba.oluchi.nancy@euro-mega.com,SP,24181114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42440124,Ayinla Shehu Salahudeen,NGR005,ayinla.shehu.salahudeen@euro-mega.com,SP,19130407,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42680224,Eric Tsavwua,NGR003,eric.tsavwua@euro-mega.com,SP,19540209,7/15/2026 11:26,7/16/2026 12:10
+EMANL,42900724,Peter Akor,NGR006,peter.akor@euro-mega.com,SP,21660713,7/15/2026 11:26,7/15/2026 11:26
+EMANL,42950824,Chukwuonye Kelechi James,NGR004,chukwuonye.kelechi.james@euro-mega.com,SE,133101011,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43091224,Ezugwu Loveyln Kelechi,NGR001,ezugwu.loveyln.kelechi@euro-mega.com,SP,23120714,7/16/2026 14:04,7/16/2026 14:04
+EMANL,43101224,Oyefeso Bukole Elisbeth,NGR001,oyefeso.bukole.elisbeth@euro-mega.com,SP,23120714,7/16/2026 14:04,9/18/2026 12:46
+EMANL,43111224,Ronald Tano,NGR003,ronald.tano@euro-mega.com,RSM,,7/15/2026 11:26,7/16/2026 12:43
+EMANL,43140125,Adeagbo Olajumoke Hellen,NGR005,adeagbo.olajumoke.hellen@euro-mega.com,SP,41751023,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43160225,Bashir Temitope Aminat,NGR001,bashir.temitope.aminat@euro-mega.com,SP,24860115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43180225,Ilesanmi Kehinde Titilope,NGR001,ilesanmi.kehinde.titilope@euro-mega.com,SP,24860115,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43210225,Akintujoye Roseline Tolulope,NGR005,akintujoye.roseline.tolulope@euro-mega.com,SP,19670310,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43220225,Jennifer,NGR001,jennifer@euro-mega.com,SP,30490118,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43230225,Okpara Chiamaka Nora,NGR007,okpara.chiamaka.nora@euro-mega.com,SP,19790111,7/15/2026 11:26,9/18/2026 12:46
+EMANL,43280325,Zainab Aminu,NGR006,zainab.aminu@euro-mega.com,SP,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43330425,Sunday Patrick Maji,NGR006,sunday.patrick.maji@euro-mega.com,SE,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43340425,Abubakar Salisu,NGR003,abubakar.salisu@euro-mega.com,SP,33420820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43390525,Sunita Elisha Sarki,NGR006,sunita.elisha.sarki@euro-mega.com,SP,21660713,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43400525,Oloyede Christianah Adetola,NGR005,oloyede.christianah.adetola@euro-mega.com,SP,25390215,7/15/2026 11:26,7/16/2026 14:04
+EMANL,43610725,Wilcox Grace Henry,NGR007,wilcox.grace.henry@euro-mega.com,SP,35620721,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43630825,Ojo Omotayo Tosin,NGR005,ojo.omotayo.tosin@euro-mega.com,SP,19130407,7/15/2026 11:26,9/18/2026 12:46
+EMANL,43791025,Kande Hamza,NGR006,kande.hamza@euro-mega.com,SP,19891311,7/15/2026 11:26,7/15/2026 11:26
+EMANL,43931125,Akpama Godwin Mbang,NGR004,akpama.godwin.mbang@euro-mega.com,SP,227011008,7/15/2026 11:26,9/18/2026 12:46
+EMANL,43941125,Oshigbo Roseline Nkeiru,NGR004,oshigbo.roseline.nkeiru@euro-mega.com,SP,405150514,7/15/2026 11:26,7/15/2026 11:26
+EMANL,44100226,Oyegbami Olufunke Yemisi,NGR005,oyegbami.olufunke.yemisi@euro-mega.com,SP,19130407,7/15/2026 11:26,9/18/2026 12:46
+EMANL,44110226,Akinsote Anuoluwapo,NGR005,akinsote.anuoluwapo@euro-mega.com,SP,21800913,7/15/2026 11:26,9/18/2026 12:46
+EMANL,44200326,Nkemjika Gilbert Boniface,NGR007,nkemjika.gilbert.boniface@euro-mega.com,SP,19560709,7/15/2026 11:26,7/15/2026 11:26
+EMANL,44210326,Rabiu Ahmed,NGR003,rabiu.ahmed@euro-mega.com,SP,24231114,9/18/2026 12:46,9/18/2026 12:46
+EMANL,44300426,Charity Ifeoma Nwaenyi,NGR007,charity.ifeoma.nwaenyi@euro-mega.com,SP,19560709,7/15/2026 11:26,7/15/2026 11:26
+EMANL,4431021,Bello Ahmad,NGR003,bello.ahmad@euro-mega.com,SP,22240114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,44340426,Jonathan God'smerit,NGR004,jonathan.god'smerit@euro-mega.com,SP,33250820,7/15/2026 11:26,7/15/2026 11:26
+EMANL,44410626,Umar Ibrahim,NGR008,umar.ibrahim@euro-mega.com,SE,27730316,7/16/2026 14:04,7/16/2026 14:04
+EMANL,7700825,Jibril Abdullahi Hassan,NGR003,jibril.abdullahi.hassan@euro-mega.com,SP,24231114,7/15/2026 11:26,7/15/2026 11:26
+EMANL,C3450913,Akinmoji Peter,NGR005,akinmoji.peter@euro-mega.com,SE,27550116,7/15/2026 11:26,7/15/2026 11:26

@@ -15,7 +15,6 @@ class CustomerMasterFactory extends Factory
     public function definition(): array
     {
         return [
-            'customer_id' => 'CUS-'.strtoupper($this->faker->unique()->lexify('??????')),
             'business_name' => $this->faker->company(),
             'customer_type' => 'SECONDARY',
             'active' => true,

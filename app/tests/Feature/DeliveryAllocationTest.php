@@ -454,6 +454,21 @@ class DeliveryAllocationTest extends TestCase
         $this->assertSame('OPEN_DELIVERY', $order->order_status->value);
     }
 
+    public function test_delivery_page_expresses_remaining_ctn_in_ctn_after_a_partial_allocation(): void
+    {
+        $this->receiveStock('480');
+        $order = $this->confirmedOrder('20', 'CTN');
+
+        $this->deliveries->createAndAllocate($order, $this->employee, $this->lines('10', 'CTN'));
+
+        $response = $this->actingAs($this->seller)->get(route('deliveries.create', $order));
+
+        $response->assertOk();
+        $response->assertSee('name="lines[0][qty]"', false);
+        $response->assertSee('max="10"', false);
+        $response->assertSee('value="10"', false);
+    }
+
     public function test_cumulative_allocations_cannot_exceed_demand(): void
     {
         $this->receiveStock('1000');

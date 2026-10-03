@@ -33,12 +33,17 @@
             @foreach ($lines as $line)
                 @php
                     $transitBalance = (float) ($transitBalances[$line['product_id']] ?? 0);
+                    $transitOrderBalance = (float) ($transitOrderBalances[$line['item_no']] ?? 0);
                     // A line is allocatable while demand is open AND there is
                     // either source stock OR legitimate reusable custody stock
                     // to back it (Phase 9 field redeployment). FREE deal lines
                     // are physical stock like any other line.
-                    $maxBasic = min((float) $line['remaining_basic'], (float) $line['unrestricted_qty'] + $transitBalance);
-                    $allocatable = $line['rejection_status'] === 'NONE' && $maxBasic > 0;
+                    $maxOrderQty = min(
+                        (float) $line['remaining_order_qty'],
+                        (float) $line['unrestricted_order_qty'] + $transitOrderBalance,
+                    );
+                    $maxTransitOrderQty = min($maxOrderQty, $transitOrderBalance);
+                    $allocatable = $line['rejection_status'] === 'NONE' && $maxOrderQty > 0;
                 @endphp
                 <div class="p-4 space-y-2">
                     <div class="flex items-start justify-between gap-3">
@@ -83,7 +88,8 @@
                             <div class="min-w-0 flex-1">
                                 <label class="block text-[11px] text-on-surface-variant" for="deliver-qty-{{ $loop->index }}">Deliver qty</label>
                                 <input id="deliver-qty-{{ $loop->index }}" type="number" name="lines[{{ $loop->index }}][qty]" step="0.001" min="0"
-                                       max="{{ rtrim(rtrim((string) $maxBasic, '0'), '.') }}"
+                                       max="{{ rtrim(rtrim(number_format($maxOrderQty, 3, '.', ''), '0'), '.') }}"
+                                       value="{{ rtrim(rtrim(number_format($maxOrderQty, 3, '.', ''), '0'), '.') }}"
                                        inputmode="decimal" placeholder="0"
                                        class="mt-0.5 w-full min-w-0 rounded-m border-outline-variant bg-surface text-sm">
                             </div>
@@ -96,7 +102,7 @@
                         @if ($transitBalance > 0)
                             <div class="flex gap-2 items-center mt-1">
                                 <input type="number" name="lines[{{ $loop->index }}][transit_qty]" step="0.001" min="0"
-                                       max="{{ rtrim(rtrim((string) $transitBalance, '0'), '.') }}"
+                                       max="{{ rtrim(rtrim((string) $maxTransitOrderQty, '0'), '.') }}"
                                        value="0" placeholder="0"
                                        class="w-32 rounded-m border-outline-variant bg-surface text-sm">
                                 <span class="text-xs text-on-surface-variant">from transit

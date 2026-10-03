@@ -78,6 +78,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::get('/customers/create', [CustomerController::class, 'create'])->name('customers.create');
     Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
+    Route::post('/customers/fjp/import', [FjpController::class, 'import'])->name('customers.fjp.import');
+    Route::delete('/customers/fjp/selected', [FjpController::class, 'destroySelectedCustomers'])->name('customers.fjp.destroy-selected');
+    Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
     Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
     Route::patch('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
     Route::patch('/customers/{customer}/deactivate', [CustomerController::class, 'deactivate'])->name('customers.deactivate');
@@ -214,6 +217,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/fjp', [FjpController::class, 'index'])->name('fjp.index');
     Route::get('/fjp/create', [FjpController::class, 'create'])->name('fjp.create');
     Route::post('/fjp', [FjpController::class, 'store'])->name('fjp.store');
+    Route::post('/fjp/import', [FjpController::class, 'import'])->name('fjp.import');
+    Route::delete('/fjp/selected', [FjpController::class, 'destroySelected'])->name('fjp.destroy-selected');
     Route::get('/fjp/{plan}/edit', [FjpController::class, 'edit'])->name('fjp.edit');
     Route::patch('/fjp/{plan}', [FjpController::class, 'update'])->name('fjp.update');
     Route::patch('/fjp/{plan}/deactivate', [FjpController::class, 'deactivate'])->name('fjp.deactivate');

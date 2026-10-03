@@ -6,6 +6,7 @@ use App\Enums\CustomerType;
 use App\Enums\LineSource;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
+use App\Enums\PriceOverrideReason;
 use App\Enums\RejectionStatus;
 use App\Exceptions\ConfirmationConflict;
 use App\Models\CustomerEmployee;
@@ -788,6 +789,10 @@ class SalesOrderService
 
             if ($overrideRequested && trim((string) $reason) === '') {
                 abort(422, 'A price override requires a reason.');
+            }
+
+            if ($overrideRequested && PriceOverrideReason::tryFrom((string) $reason) === null) {
+                abort(422, 'Choose a valid price override reason.');
             }
 
             $unitPrice = $overrideRequested ? (string) $line['unit_price'] : ($recommended ?? '0');

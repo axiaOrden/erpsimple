@@ -80,9 +80,9 @@ class DealEntitlementConcurrencyTest extends TestCase
             'company_id' => $companyId,
         ]);
         $primary = CustomerMaster::factory()->primary()->forEmployee($employee)
-            ->create(['customer_id' => 'CFEP.'.$hex]);
+            ->create();
         $soldTo = CustomerMaster::factory()->forEmployee($employee)
-            ->create(['customer_id' => 'CFEC.'.$hex]);
+            ->create();
         $product = ProductMaster::factory()->forCompany($company)
             ->create(['product_id' => 'CFEQ.'.$hex, 'basic_unit' => 'PCS']);
 
@@ -315,8 +315,10 @@ PHP;
     private function purgeResidue(): void
     {
         $companyLike = self::PREFIX_COMPANY.'%';
-        $customerLike = 'CFE%';
         $employeeLike = 'CFEE.%';
+        $customerIds = DB::table('customer_employee')
+            ->where('employee_id', 'like', $employeeLike)
+            ->pluck('customer_id');
 
         DB::table('delivery_item')->whereIn('delivery_no', function ($q) use ($companyLike) {
             $q->select('delivery_no')->from('delivery')->where('company_id', 'like', $companyLike);
@@ -332,11 +334,9 @@ PHP;
         })->delete();
         DB::table('sales_order')->where('company_id', 'like', $companyLike)->delete();
         DB::table('inventory_movement')->where('company_id', 'like', $companyLike)->delete();
-        DB::table('inventory')->where('customer_id', 'like', $customerLike)->delete();
-        DB::table('customer_employee')->whereIn('customer_id', function ($q) use ($customerLike) {
-            $q->select('customer_id')->from('customer_master')->where('customer_id', 'like', $customerLike);
-        })->delete();
-        DB::table('customer_master')->where('customer_id', 'like', $customerLike)->delete();
+        DB::table('inventory')->whereIn('customer_id', $customerIds)->delete();
+        DB::table('customer_employee')->whereIn('customer_id', $customerIds)->delete();
+        DB::table('customer_master')->whereIn('customer_id', $customerIds)->delete();
         DB::table('deal_reward')->where('deal_no', 'like', 'CFED.%')->delete();
         DB::table('deal_qualifier')->where('deal_no', 'like', 'CFED.%')->delete();
         DB::table('deal_condition')->where('deal_no', 'like', 'CFED.%')->delete();

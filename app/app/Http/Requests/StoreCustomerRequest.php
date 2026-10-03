@@ -17,17 +17,18 @@ class StoreCustomerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_id' => ['required', 'string', 'max:50', 'unique:customer_master,customer_id'],
             'business_name' => ['required', 'string', 'max:255'],
             'customer_type' => ['required', Rule::in(['PRIMARY', 'SECONDARY', 'VAN', 'SHIP_TO'])],
             // SHIP_TO must reference an existing PRIMARY parent; others must not have one.
             'parent_customer_id' => [
                 'nullable',
-                'string',
+                'integer',
                 'exists:customer_master,customer_id',
                 Rule::requiredIf(fn () => $this->input('customer_type') === 'SHIP_TO'),
                 Rule::prohibitedIf(fn () => $this->filled('parent_customer_id') && $this->input('customer_type') !== 'SHIP_TO'),
             ],
+            'ext_origin_id' => ['nullable', 'string', 'max:100'],
+            'ext_origin_company' => ['nullable', 'string', 'max:100'],
             'contact_person' => ['nullable', 'string', 'max:255'],
             'phone_number' => ['nullable', 'string', 'max:50'],
             'email_address' => ['nullable', 'email', 'max:255'],

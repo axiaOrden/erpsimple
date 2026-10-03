@@ -2,7 +2,7 @@
     <x-slot name="header">
         <h1>Assignments — {{ $employee->employee_name }}</h1>
         <p class="text-sm text-on-surface-variant">
-            {{ $employee->employee_id }} · {{ $employee->company_id }}
+            {{ $employee->employee_id }} · {{ $employee->company_id }} · Region {{ $employee->region_code ?: 'not set' }}
         </p>
     </x-slot>
 
@@ -14,11 +14,12 @@
             <h2>Assigned customers</h2>
             <p class="text-sm text-on-surface-variant mt-1 mb-4">
                 The commercial relationship. These are the customers the employee can record visits
-                and orders for. The supplying Primary is chosen per order, not by this list.
+                and orders for. Only active customers in region <strong>{{ $employee->region_code ?: 'not set' }}</strong>
+                are eligible. The supplying Primary is chosen per order, not by this list.
             </p>
 
             @if ($customers->isEmpty())
-                <p class="text-sm text-on-surface-variant">No active customers exist yet.</p>
+                <p class="text-sm text-on-surface-variant">No active customers exist in this employee's sales region.</p>
             @else
                 <div class="grid sm:grid-cols-2 gap-2 max-h-96 overflow-y-auto">
                     @foreach ($customers as $row)

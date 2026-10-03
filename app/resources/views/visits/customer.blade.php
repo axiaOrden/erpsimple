@@ -23,7 +23,7 @@
         // rendered, so the profile never becomes a wall of empty rows.
         $cityState = trim(implode(', ', array_filter([$customer->city, $customer->state])));
         $addressLine = trim(implode(', ', array_filter([$customer->address, $customer->address2])));
-        $regionMarket = trim(implode(' · ', array_filter([$customer->sales_region, $customer->market])));
+        $regionMarket = trim(implode(' · ', array_filter([$customer->salesRegion?->description, $customer->market])));
 
         $customerDetails = array_filter([
             'Contact person' => $customer->contact_person,

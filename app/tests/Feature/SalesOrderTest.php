@@ -220,7 +220,7 @@ class SalesOrderTest extends TestCase
         $order = $this->service->createDraft(
             $this->employee, $this->primary->customer_id, $this->primary->customer_id,
             $this->secondary->customer_id,
-            $this->lines('10', 'CTN', '450.00', "Distributor's decision"),
+            $this->lines('10', 'CTN', '450.00', 'DISTRIBUTOR_OWN_PRICE'),
         )['order'];
 
         $item = $order->items->first();
@@ -228,7 +228,15 @@ class SalesOrderTest extends TestCase
         $this->assertTrue($item->price_overridden);
         $this->assertSame('450.00', (string) $item->unit_price);
         $this->assertSame('500.00', (string) $item->recommended_price);
-        $this->assertSame("Distributor's decision", $item->price_override_reason);
+        $this->assertSame('DISTRIBUTOR_OWN_PRICE', $item->price_override_reason);
+
+        $this->expectException(HttpException::class);
+
+        $this->service->createDraft(
+            $this->employee, $this->primary->customer_id, $this->primary->customer_id,
+            $this->secondary->customer_id,
+            $this->lines('10', 'CTN', '450.00', 'Typed free-text reason'),
+        );
     }
 
     public function test_later_price_master_change_does_not_touch_order_snapshot(): void

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\OrderType;
+use App\Enums\PriceOverrideReason;
 use App\Models\CustomerEmployee;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
@@ -186,6 +187,7 @@ class SalesOrderController extends Controller
                 ->orderBy('business_name')->get(),
             'selectedCustomerId' => $selectedCustomerId,
             'vanBlock' => $vanBlock,
+            'priceOverrideReasons' => PriceOverrideReason::cases(),
         ]);
     }
 
@@ -298,7 +300,7 @@ class SalesOrderController extends Controller
         $employee = $this->employeeOf($request->user());
 
         $validated = $request->validate([
-            'sold_to_customer_id' => ['required', 'string'],
+            'sold_to_customer_id' => ['required', 'integer'],
         ]);
 
         $customer = CustomerMaster::find($validated['sold_to_customer_id']);
@@ -326,16 +328,16 @@ class SalesOrderController extends Controller
         $employee = $this->employeeOf($request->user());
 
         $validated = $request->validate([
-            'supplying_customer_id' => ['required', 'string'],
-            'source_customer_id' => ['required', 'string'],
-            'sold_to_customer_id' => ['required', 'string'],
+            'supplying_customer_id' => ['required', 'integer'],
+            'source_customer_id' => ['required', 'integer'],
+            'sold_to_customer_id' => ['required', 'integer'],
             'order_type' => ['nullable', 'in:STANDARD,VAN_ORDER'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_id' => ['required', 'string'],
             'lines.*.qty' => ['required', 'numeric', 'gt:0'],
             'lines.*.unit' => ['required', 'string'],
             'lines.*.unit_price' => ['nullable', 'numeric', 'min:0'],
-            'lines.*.price_override_reason' => ['nullable', 'string', 'max:255'],
+            'lines.*.price_override_reason' => ['nullable', Rule::enum(PriceOverrideReason::class)],
         ]);
 
         $action = $request->input('action', 'draft'); // draft | confirm
@@ -404,6 +406,7 @@ class SalesOrderController extends Controller
                 ->where('active', true)->orderBy('business_name')->get(),
             'primaries' => CustomerMaster::whereIn('customer_id', $this->orders->eligibleSupplyingIds($employee))
                 ->orderBy('business_name')->get(),
+            'priceOverrideReasons' => PriceOverrideReason::cases(),
         ]);
     }
 
@@ -417,7 +420,7 @@ class SalesOrderController extends Controller
             'lines.*.qty' => ['required', 'numeric', 'gt:0'],
             'lines.*.unit' => ['required', 'string'],
             'lines.*.unit_price' => ['nullable', 'numeric', 'min:0'],
-            'lines.*.price_override_reason' => ['nullable', 'string', 'max:255'],
+            'lines.*.price_override_reason' => ['nullable', Rule::enum(PriceOverrideReason::class)],
         ]);
 
         $action = $request->input('action', 'draft');
@@ -500,15 +503,15 @@ class SalesOrderController extends Controller
 
         $result = $this->sync->process('order_draft', $request, function () use ($request, $employee) {
             $validated = $request->validate([
-                'supplying_customer_id' => ['required', 'string'],
-                'source_customer_id' => ['required', 'string'],
-                'sold_to_customer_id' => ['required', 'string'],
+                'supplying_customer_id' => ['required', 'integer'],
+                'source_customer_id' => ['required', 'integer'],
+                'sold_to_customer_id' => ['required', 'integer'],
                 'lines' => ['required', 'array', 'min:1'],
                 'lines.*.product_id' => ['required', 'string'],
                 'lines.*.qty' => ['required', 'numeric', 'gt:0'],
                 'lines.*.unit' => ['required', 'string'],
                 'lines.*.unit_price' => ['nullable', 'numeric', 'min:0'],
-                'lines.*.price_override_reason' => ['nullable', 'string', 'max:255'],
+                'lines.*.price_override_reason' => ['nullable', Rule::enum(PriceOverrideReason::class)],
                 'request_confirm' => ['sometimes', 'boolean'],
             ]);
 

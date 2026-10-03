@@ -190,8 +190,13 @@
                                 @foreach ($entry['evidence'] as $evidence)
                                     <a href="{{ route('invoice.public.evidence', ['token' => $invoice->public_token, 'payment' => $payment->payment_id, 'evidence' => $evidence->evidence_id]) }}"
                                        target="_blank" rel="noopener noreferrer"
-                                       class="inline-flex h-10 items-center justify-center rounded-full bg-surface-variant px-4 text-xs font-medium text-on-surface-variant">
-                                        View receipt / evidence{{ $entry['evidence']->count() > 1 ? ' '.$loop->iteration : '' }}
+                                       class="block overflow-hidden rounded-m border border-outline-variant bg-surface-variant">
+                                        <img src="{{ route('invoice.public.evidence', ['token' => $invoice->public_token, 'payment' => $payment->payment_id, 'evidence' => $evidence->evidence_id]) }}"
+                                             alt="Proof of payment{{ $entry['evidence']->count() > 1 ? ' '.$loop->iteration : '' }}"
+                                             class="max-h-80 w-full object-contain" loading="lazy">
+                                        <span class="block px-3 py-2 text-center text-xs font-medium text-on-surface-variant">
+                                            Open proof of payment{{ $entry['evidence']->count() > 1 ? ' '.$loop->iteration : '' }}
+                                        </span>
                                     </a>
                                 @endforeach
                             </div>

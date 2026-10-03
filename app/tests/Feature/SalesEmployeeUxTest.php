@@ -26,6 +26,7 @@ use App\Models\ProductMaster;
 use App\Models\ProductUnitConversion;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderRejectionReason;
+use App\Models\SalesRegion;
 use App\Models\StockCount;
 use App\Services\DeliveryService;
 use App\Services\FinanceService;
@@ -93,7 +94,15 @@ class SalesEmployeeUxTest extends TestCase
         Storage::fake('local');
 
         $this->company = CompanyMaster::factory()->create();
-        $this->employee = EmployeeMaster::factory()->create(['company_id' => $this->company->company_id]);
+        SalesRegion::firstOrCreate(['region_code' => 'UX-REGION'], [
+            'description' => 'UX Test Region',
+            'zone' => 'UX',
+            'sort_order' => 1,
+        ]);
+        $this->employee = EmployeeMaster::factory()->create([
+            'company_id' => $this->company->company_id,
+            'region_code' => 'UX-REGION',
+        ]);
         $this->seller = AppUser::factory()->salesEmployee()->create([
             'company_id' => $this->company->company_id,
             'employee_id' => $this->employee->employee_id,
@@ -309,6 +318,7 @@ class SalesEmployeeUxTest extends TestCase
         $this->assertSame('+2348012345678', $customer->phone_number);
         $this->assertSame('SECONDARY', $customer->customer_type->value);
         $this->assertSame('Nigeria', $customer->country);
+        $this->assertSame($this->employee->region_code, $customer->sales_region);
         $this->assertTrue((bool) $customer->active);
         $this->assertSame('6.5243790', (string) $customer->gps_latitude);
         $this->assertSame('3.3792050', (string) $customer->gps_longitude);
@@ -319,7 +329,7 @@ class SalesEmployeeUxTest extends TestCase
 
         // Preferred visit uses the project's one scheduling model (customer_fjp).
         $this->assertTrue(CustomerFjp::where('customer_id', $customer->customer_id)
-            ->where('employee_id', $this->employee->employee_id)
+            ->where('company_id', $this->company->company_id)
             ->where('preferred_week', $week)
             ->exists());
 
@@ -341,6 +351,7 @@ class SalesEmployeeUxTest extends TestCase
             'active' => 0,
             'phone_canonical' => '+2338000000000',
             'parent_customer_id' => $this->primary->customer_id,
+            'sales_region' => 'CRAFTED-REGION',
         ])->assertRedirect();
 
         $created = CustomerMaster::where('business_name', 'Spoofed Store')->firstOrFail();
@@ -350,6 +361,7 @@ class SalesEmployeeUxTest extends TestCase
         $this->assertSame('Nigeria', $created->country);
         $this->assertTrue((bool) $created->active);
         $this->assertNull($created->parent_customer_id);
+        $this->assertSame($this->employee->region_code, $created->sales_region);
         $this->assertSame('+2348019998888', $created->phone_canonical, 'Country dial code is not client-chosen.');
     }
 
@@ -500,7 +512,7 @@ class SalesEmployeeUxTest extends TestCase
 
         $this->actingAs($this->seller)->get(route('visits.today'))
             ->assertOk()
-            ->assertDontSee('Future Trader');
+            ->assertSee('1 planned');
     }
 
     // ---- 2: today's SKU lifecycle ------------------------------------------
@@ -1995,7 +2007,7 @@ class SalesEmployeeUxTest extends TestCase
         $this->actingAs($this->seller)->get(route('more.index'))
             ->assertOk()
             ->assertSee('Shipments')
-            ->assertSee('Payments')
+            ->assertSee('Pending settlements')
             ->assertSee('Customers')
             ->assertSee('Field stock / transit')
             ->assertSee('Profile')

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CompanyMaster;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
+use App\Models\SalesRegion;
 use App\Services\CustomerRegistrationService;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -50,9 +51,15 @@ class CustomerRegistrationConcurrencyTest extends TestCase
         $hex = bin2hex(random_bytes(4));
 
         $this->company = CompanyMaster::factory()->create(['company_id' => self::PREFIX.$hex]);
+        SalesRegion::firstOrCreate(['region_code' => 'FC11.REGION'], [
+            'description' => 'Concurrency Test Region',
+            'zone' => 'TEST',
+            'sort_order' => 1,
+        ]);
         $this->employee = EmployeeMaster::factory()->create([
             'employee_id' => self::PREFIX.'E.'.$hex,
             'company_id' => $this->company->company_id,
+            'region_code' => 'FC11.REGION',
         ]);
 
         // A unique, deterministic-for-this-run subscriber number (10 national
@@ -240,7 +247,6 @@ PHP;
             ->all();
 
         DB::table('customer_fjp')->whereIn('customer_id', $customerIds)->delete();
-        DB::table('customer_fjp')->where('employee_id', 'like', $employeeLike)->delete();
         DB::table('customer_employee')->where('employee_id', 'like', $employeeLike)->delete();
         DB::table('customer_visit_attendance')->whereIn('customer_id', $customerIds)->delete();
 
@@ -258,5 +264,6 @@ PHP;
         DB::table('app_user')->where('company_id', 'like', $companyLike)->delete();
         DB::table('employee_master')->where('employee_id', 'like', $employeeLike)->delete();
         DB::table('company_master')->where('company_id', 'like', $companyLike)->delete();
+        DB::table('sales_region')->where('region_code', 'FC11.REGION')->delete();
     }
 }

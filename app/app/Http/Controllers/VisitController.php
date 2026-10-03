@@ -112,7 +112,7 @@ class VisitController extends Controller
         $employee = $user->employee;
         abort_if($employee === null, 403);
 
-        $customer = CustomerMaster::where('customer_id', $customerId)->firstOrFail();
+        $customer = CustomerMaster::with('salesRegion')->where('customer_id', $customerId)->firstOrFail();
 
         // Assignment is the commercial relationship — server-side enforcement.
         $assigned = CustomerEmployee::where('employee_id', $employee->employee_id)

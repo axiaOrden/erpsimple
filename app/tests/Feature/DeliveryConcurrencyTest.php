@@ -72,9 +72,9 @@ class DeliveryConcurrencyTest extends TestCase
             'company_id' => $companyId,
         ]);
         $primary = CustomerMaster::factory()->primary()->forEmployee($employee)
-            ->create(['customer_id' => 'CLCP.'.$hex]);
+            ->create();
         $soldTo = CustomerMaster::factory()->forEmployee($employee)
-            ->create(['customer_id' => 'CLCD.'.$hex]);
+            ->create();
         $product = ProductMaster::factory()->forCompany($company)
             ->create(['product_id' => 'CLCQ.'.$hex, 'basic_unit' => 'PCS']);
 
@@ -175,9 +175,9 @@ class DeliveryConcurrencyTest extends TestCase
         $company = CompanyMaster::factory()->create(['company_id' => $companyId]);
         $employee = EmployeeMaster::factory()->create(['employee_id' => $employeeId, 'company_id' => $companyId]);
         $primary = CustomerMaster::factory()->primary()->forEmployee($employee)
-            ->create(['customer_id' => 'CLCP.'.$hex]);
+            ->create();
         $soldTo = CustomerMaster::factory()->forEmployee($employee)
-            ->create(['customer_id' => 'CLCD.'.$hex]);
+            ->create();
         $product = ProductMaster::factory()->forCompany($company)
             ->create(['product_id' => 'CLCQ.'.$hex, 'basic_unit' => 'PCS']);
 
@@ -243,9 +243,11 @@ PHP;
     private function purgeResidue(): void
     {
         $companyLike = self::PREFIX_COMPANY.'%';
-        $customerLike = 'CLC%';
         $employeeLike = 'CLCE.%';
         $userLike = 'clcu.%';
+        $customerIds = DB::table('customer_employee')
+            ->where('employee_id', 'like', $employeeLike)
+            ->pluck('customer_id');
 
         DB::table('delivery_item')->whereIn('delivery_no', function ($q) use ($companyLike) {
             $q->select('delivery_no')->from('delivery')->where('company_id', 'like', $companyLike);
@@ -260,11 +262,9 @@ PHP;
             $q->select('count_no')->from('stock_count')->where('company_id', 'like', $companyLike);
         })->delete();
         DB::table('stock_count')->where('company_id', 'like', $companyLike)->delete();
-        DB::table('inventory')->where('customer_id', 'like', $customerLike)->delete();
-        DB::table('customer_employee')->whereIn('customer_id', function ($q) use ($customerLike) {
-            $q->select('customer_id')->from('customer_master')->where('customer_id', 'like', $customerLike);
-        })->delete();
-        DB::table('customer_master')->where('customer_id', 'like', $customerLike)->delete();
+        DB::table('inventory')->whereIn('customer_id', $customerIds)->delete();
+        DB::table('customer_employee')->whereIn('customer_id', $customerIds)->delete();
+        DB::table('customer_master')->whereIn('customer_id', $customerIds)->delete();
         DB::table('app_user')->where('user_id', 'like', $userLike)->delete();
         DB::table('employee_product')->whereIn('product_id', function ($q) use ($companyLike) {
             $q->select('product_id')->from('product_master')->where('company_id', 'like', $companyLike);

@@ -154,6 +154,12 @@ class DeliveryService
                 'restricted_qty' => $inventory?->restricted_qty ?? '0.000',
                 'on_hand_qty' => $inventory?->onHandQty() ?? '0.000',
                 'basic_unit' => $inventory->basic_unit ?? $item->product->basic_unit,
+                'remaining_order_qty' => $this->units->fromBasic($item->product, $effectiveRemaining, (string) $item->order_unit),
+                'unrestricted_order_qty' => $this->units->fromBasic(
+                    $item->product,
+                    (string) ($inventory?->unrestricted_qty ?? '0.000'),
+                    (string) $item->order_unit,
+                ),
             ];
         });
     }

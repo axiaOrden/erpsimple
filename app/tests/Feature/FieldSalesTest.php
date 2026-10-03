@@ -10,6 +10,7 @@ use App\Models\CustomerVisitAttendance;
 use App\Models\EmployeeMaster;
 use App\Services\FjpRotationService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class FieldSalesTest extends TestCase
@@ -89,16 +90,18 @@ class FieldSalesTest extends TestCase
             ->assertDontSee($this->customerOther->business_name);
     }
 
-    public function test_admin_cannot_create_fjp_for_other_company_employee(): void
+    public function test_admin_cannot_create_fjp_for_customer_not_assigned_in_company(): void
     {
         $response = $this->actingAs($this->adminA)->post('/fjp', [
-            'employee_id' => $this->employeeB->employee_id, // other company
-            'customer_id' => $this->customerMine->customer_id,
+            'customer_id' => $this->customerOther->customer_id,
             'preferred_day' => 1,
         ]);
 
-        $response->assertSessionHasErrors('employee_id');
-        $this->assertDatabaseMissing('customer_fjp', ['employee_id' => $this->employeeB->employee_id]);
+        $response->assertSessionHasErrors('customer_id');
+        $this->assertDatabaseMissing('customer_fjp', [
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerOther->customer_id,
+        ]);
     }
 
     public function test_admin_cannot_edit_fjp_of_other_company(): void
@@ -127,6 +130,95 @@ class FieldSalesTest extends TestCase
             'customer_id' => $this->customerMine->customer_id,
             'preferred_day' => 1,
         ])->assertForbidden();
+    }
+
+    public function test_company_admin_bulk_import_replaces_only_uploaded_customer_schedule(): void
+    {
+        $this->customerMine->employees()->attach($this->employeeB->employee_id, ['role' => 'SE']);
+        $companyAOld = CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 1,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+        $companyBOld = CustomerFjp::create([
+            'company_id' => $this->companyB->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 4,
+            'preferred_day' => 5,
+            'active' => true,
+        ]);
+        $file = UploadedFile::fake()->createWithContent(
+            'preferred-visits.csv',
+            "customer id|preferred week|preferred day\n{$this->customerMine->customer_id}|2|Tuesday\n{$this->customerMine->customer_id}|*|6\n",
+        );
+
+        $this->actingAs($this->adminA)->post(route('customers.fjp.import'), ['fjp_file' => $file])
+            ->assertRedirect(route('customers.index'));
+
+        $this->assertDatabaseMissing('customer_fjp', ['fjp_id' => $companyAOld->fjp_id]);
+        $this->assertDatabaseHas('customer_fjp', [
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 2,
+            'preferred_day' => 2,
+        ]);
+        $this->assertDatabaseHas('customer_fjp', [
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => null,
+            'preferred_day' => 6,
+        ]);
+        $this->assertDatabaseHas('customer_fjp', ['fjp_id' => $companyBOld->fjp_id]);
+    }
+
+    public function test_bulk_import_is_atomic_when_a_customer_is_outside_the_company(): void
+    {
+        $existing = CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 1,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+        $file = UploadedFile::fake()->createWithContent(
+            'preferred-visits.txt',
+            "{$this->customerMine->customer_id}|2|Tuesday\n{$this->customerOther->customer_id}|3|Friday\n",
+        );
+
+        $this->actingAs($this->adminA)->post(route('customers.fjp.import'), ['fjp_file' => $file])
+            ->assertSessionHasErrors('fjp_file');
+
+        $this->assertDatabaseHas('customer_fjp', ['fjp_id' => $existing->fjp_id]);
+        $this->assertDatabaseMissing('customer_fjp', [
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 2,
+        ]);
+    }
+
+    public function test_customer_selection_clear_never_deletes_another_companys_plan(): void
+    {
+        $companyAPlan = CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+        $companyBPlan = CustomerFjp::create([
+            'company_id' => $this->companyB->company_id,
+            'customer_id' => $this->customerOther->customer_id,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+
+        $this->actingAs($this->adminA)->delete(route('customers.fjp.destroy-selected'), [
+            'customer_ids' => [$this->customerMine->customer_id, $this->customerOther->customer_id],
+        ])->assertRedirect();
+
+        $this->assertDatabaseMissing('customer_fjp', ['fjp_id' => $companyAPlan->fjp_id]);
+        $this->assertDatabaseHas('customer_fjp', ['fjp_id' => $companyBPlan->fjp_id]);
     }
 
     // ---- Today's visits scoping -------------------------------------------------
@@ -397,9 +489,47 @@ class FieldSalesTest extends TestCase
             'customer_id' => $this->customerMine->customer_id,
             'preferred_week' => 5,
             'preferred_day' => 1,
-        ])->assertSessionHasErrors('preferred_week');
+        ])->assertSessionHasErrors('preferred_visits.0.preferred_week');
 
         $this->assertDatabaseMissing('customer_fjp', ['preferred_week' => 5]);
+    }
+
+    public function test_admin_can_add_multiple_preferred_visits_without_duplicate_rows(): void
+    {
+        $existing = CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 1,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+
+        $this->actingAs($this->adminA)->patch(route('fjp.update', $existing), [
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_visits' => [
+                ['preferred_week' => 1, 'preferred_day' => 1],
+                ['preferred_week' => 1, 'preferred_day' => 1],
+                ['preferred_week' => 2, 'preferred_day' => 4],
+                ['preferred_week' => null, 'preferred_day' => 6],
+            ],
+            'active' => 1,
+        ])->assertRedirect(route('fjp.index'));
+
+        $this->assertSame(3, CustomerFjp::query()
+            ->where('company_id', $this->companyA->company_id)
+            ->where('customer_id', $this->customerMine->customer_id)
+            ->count());
+        $this->assertDatabaseHas('customer_fjp', [
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $this->customerMine->customer_id,
+            'preferred_week' => 2,
+            'preferred_day' => 4,
+        ]);
+
+        $this->actingAs($this->adminA)->get(route('fjp.edit', $existing))
+            ->assertOk()
+            ->assertSee('+ Add more')
+            ->assertSee('preferred_visits[', false);
     }
 
     // ---- Device timestamp handling ---------------------------------------------------

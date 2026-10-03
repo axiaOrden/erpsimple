@@ -177,9 +177,9 @@ class VanCycleConcurrencyTest extends TestCase
         ]);
 
         $primary = CustomerMaster::factory()->primary()->forEmployee($employee)
-            ->create(['customer_id' => 'CVNP.'.$hex]);
+            ->create();
         $van = CustomerMaster::factory()->van()->forEmployee($employee)
-            ->create(['customer_id' => 'CVNV.'.$hex]);
+            ->create();
 
         $this->productId = 'CVNQ.'.$hex;
 
@@ -248,17 +248,17 @@ PHP;
     private function purgeResidue(): void
     {
         $companyLike = self::PREFIX_COMPANY.'%';
-        $customerLike = 'CVN%';
         $employeeLike = 'CVNE.%';
+        $customerIds = DB::table('customer_employee')
+            ->where('employee_id', 'like', $employeeLike)
+            ->pluck('customer_id');
 
         DB::table('sales_order_item')->whereIn('sales_order_no', function ($q) use ($companyLike) {
             $q->select('sales_order_no')->from('sales_order')->where('company_id', 'like', $companyLike);
         })->delete();
         DB::table('sales_order')->where('company_id', 'like', $companyLike)->delete();
-        DB::table('customer_employee')->whereIn('customer_id', function ($q) use ($customerLike) {
-            $q->select('customer_id')->from('customer_master')->where('customer_id', 'like', $customerLike);
-        })->delete();
-        DB::table('customer_master')->where('customer_id', 'like', $customerLike)->delete();
+        DB::table('customer_employee')->whereIn('customer_id', $customerIds)->delete();
+        DB::table('customer_master')->whereIn('customer_id', $customerIds)->delete();
         DB::table('employee_product')->whereIn('product_id', function ($q) use ($companyLike) {
             $q->select('product_id')->from('product_master')->where('company_id', 'like', $companyLike);
         })->delete();

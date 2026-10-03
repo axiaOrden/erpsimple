@@ -5,6 +5,9 @@ namespace App\Models;
 use App\Enums\CustomerType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CustomerMaster extends Model
 {
@@ -14,15 +17,12 @@ class CustomerMaster extends Model
 
     protected $primaryKey = 'customer_id';
 
-    public $incrementing = false;
-
-    protected $keyType = 'string';
-
     protected $fillable = [
-        'customer_id',
         'business_name',
         'customer_type',
         'parent_customer_id',
+        'ext_origin_id',
+        'ext_origin_company',
         'contact_person',
         'phone_number',
         'phone_canonical',
@@ -48,17 +48,17 @@ class CustomerMaster extends Model
         ];
     }
 
-    public function parent()
+    public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_customer_id', 'customer_id');
     }
 
-    public function shipToLocations()
+    public function shipToLocations(): HasMany
     {
         return $this->hasMany(self::class, 'parent_customer_id', 'customer_id');
     }
 
-    public function employees()
+    public function employees(): BelongsToMany
     {
         return $this->belongsToMany(
             EmployeeMaster::class,
@@ -70,7 +70,12 @@ class CustomerMaster extends Model
         )->withPivot(['role', 'valid_from', 'valid_to']);
     }
 
-    public function inventory()
+    public function salesRegion(): BelongsTo
+    {
+        return $this->belongsTo(SalesRegion::class, 'sales_region', 'region_code');
+    }
+
+    public function inventory(): HasMany
     {
         return $this->hasMany(Inventory::class, 'customer_id', 'customer_id');
     }
@@ -80,7 +85,7 @@ class CustomerMaster extends Model
      * NOTE: this does NOT imply the customer is the invoice debtor — that
      * rule is unresolved (docs/ARCHITECTURE.md risk 3).
      */
-    public function salesOrders()
+    public function salesOrders(): HasMany
     {
         return $this->hasMany(SalesOrder::class, 'sold_to_customer_id', 'customer_id');
     }

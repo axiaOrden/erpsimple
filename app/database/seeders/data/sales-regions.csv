@@ -1,0 +1,12 @@
+region_code,description,zone,sort_order
+NGR001,Lagos,01.South,1
+NGR002,Northeast,02.North,5
+NGR003,Northwest1,02.North,1
+NGR004,Southeast,01.South,4
+NGR005,Southwest,01.South,2
+NGR006,Northcentral1,02.North,3
+NGR007,Southsouth,01.South,3
+NGR008,Northwest2,02.North,2
+NGR009,Northcentral2,02.North,4
+NGR010,Southcentral,01.South,5
+NGR012,Northeast2,02.North,6

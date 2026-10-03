@@ -25,9 +25,9 @@
             <p class="text-sm font-semibold">POD</p>
             <p class="text-[11px] text-on-surface-variant">{{ $attention['awaiting_pod_orders'] }} awaiting acceptance</p>
         </a>
-        <a href="{{ route('finance.payments.index') }}" class="m-card p-3">
-            <p class="text-sm font-semibold">Payments</p>
-            <p class="text-[11px] text-on-surface-variant">{{ $attention['unpaid_invoices'] }} invoice(s) unpaid</p>
+        <a href="{{ route('finance.invoices.index', ['status' => 'outstanding']) }}" class="m-card p-3">
+            <p class="text-sm font-semibold">Pending settlements</p>
+            <p class="text-[11px] text-on-surface-variant">{{ $attention['unpaid_invoices'] }} invoice(s) ready for payment</p>
         </a>
         <a href="{{ route('finance.invoices.index') }}" class="m-card p-3">
             <p class="text-sm font-semibold">Invoices</p>

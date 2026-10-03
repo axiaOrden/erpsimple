@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\AppUser;
 use App\Models\CompanyMaster;
+use App\Models\CustomerFjp;
 use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
 use App\Models\EmployeeProduct;
 use App\Models\ProductMaster;
+use App\Models\SalesRegion;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -150,7 +152,6 @@ class MasterDataTest extends TestCase
         $primary = CustomerMaster::factory()->primary()->create();
 
         $this->actingAs($super)->post('/customers', [
-            'customer_id' => 'SHIP-1',
             'business_name' => 'Primary Warehouse 2',
             'customer_type' => 'SHIP_TO',
             'parent_customer_id' => $primary->customer_id,
@@ -158,7 +159,7 @@ class MasterDataTest extends TestCase
         ])->assertRedirect('/customers');
 
         $this->assertDatabaseHas('customer_master', [
-            'customer_id' => 'SHIP-1',
+            'business_name' => 'Primary Warehouse 2',
             'parent_customer_id' => $primary->customer_id,
         ]);
     }
@@ -170,7 +171,6 @@ class MasterDataTest extends TestCase
         $secondary = CustomerMaster::factory()->create(['customer_type' => 'SECONDARY']);
 
         $this->actingAs($super)->post('/customers', [
-            'customer_id' => 'SHIP-BAD',
             'business_name' => 'Bad ship-to',
             'customer_type' => 'SHIP_TO',
             'parent_customer_id' => $secondary->customer_id,
@@ -184,7 +184,6 @@ class MasterDataTest extends TestCase
         $primary = CustomerMaster::factory()->primary()->create();
 
         $this->actingAs($super)->post('/customers', [
-            'customer_id' => 'SEC-BAD',
             'business_name' => 'Bad secondary',
             'customer_type' => 'SECONDARY',
             'parent_customer_id' => $primary->customer_id,
@@ -248,9 +247,17 @@ class MasterDataTest extends TestCase
     {
         $admin = $this->adminFor($this->companyA);
 
-        $employee = EmployeeMaster::factory()->create(['company_id' => $this->companyA->company_id]);
-        $c1 = CustomerMaster::factory()->create();
-        $c2 = CustomerMaster::factory()->create();
+        SalesRegion::firstOrCreate(['region_code' => 'ASSIGN-REG'], [
+            'description' => 'Assignment Region',
+            'zone' => 'TEST',
+            'sort_order' => 1,
+        ]);
+        $employee = EmployeeMaster::factory()->create([
+            'company_id' => $this->companyA->company_id,
+            'region_code' => 'ASSIGN-REG',
+        ]);
+        $c1 = CustomerMaster::factory()->create(['sales_region' => 'ASSIGN-REG']);
+        $c2 = CustomerMaster::factory()->create(['sales_region' => 'ASSIGN-REG']);
         $p1 = ProductMaster::factory()->forCompany($this->companyA)->create();
         $pForeign = ProductMaster::factory()->forCompany($this->companyB)->create();
 
@@ -295,6 +302,103 @@ class MasterDataTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseMissing('employee_product', ['employee_id' => $employee->employee_id]);
+    }
+
+    public function test_customer_assignments_are_limited_to_the_employee_sales_region(): void
+    {
+        $admin = $this->adminFor($this->companyA);
+        SalesRegion::firstOrCreate(['region_code' => 'REG-A'], ['description' => 'Region A', 'zone' => 'TEST', 'sort_order' => 1]);
+        SalesRegion::firstOrCreate(['region_code' => 'REG-B'], ['description' => 'Region B', 'zone' => 'TEST', 'sort_order' => 2]);
+
+        $employee = EmployeeMaster::factory()->create([
+            'company_id' => $this->companyA->company_id,
+            'region_code' => 'REG-A',
+        ]);
+        $eligible = CustomerMaster::factory()->create(['business_name' => 'Eligible Shop', 'sales_region' => 'REG-A']);
+        $outsideRegion = CustomerMaster::factory()->create(['business_name' => 'Outside Shop', 'sales_region' => 'REG-B']);
+
+        $this->actingAs($admin)
+            ->get(route('assignments.edit', $employee))
+            ->assertOk()
+            ->assertSee('Eligible Shop')
+            ->assertDontSee('Outside Shop');
+
+        $this->actingAs($admin)->put(route('assignments.update', $employee), [
+            'customer_ids' => [$outsideRegion->customer_id],
+            'product_scope_mode' => 'ALL',
+        ])->assertSessionHasErrors('customer_ids.0');
+
+        $this->assertDatabaseMissing('customer_employee', [
+            'employee_id' => $employee->employee_id,
+            'customer_id' => $outsideRegion->customer_id,
+        ]);
+        $this->assertDatabaseMissing('customer_employee', [
+            'employee_id' => $employee->employee_id,
+            'customer_id' => $eligible->customer_id,
+        ]);
+    }
+
+    public function test_company_admin_can_view_customer_details_and_company_preferred_visits(): void
+    {
+        $admin = $this->adminFor($this->companyA);
+        SalesRegion::firstOrCreate(['region_code' => 'SHOW-REG'], [
+            'description' => 'Lagos Mainland',
+            'zone' => 'LAGOS',
+            'sort_order' => 1,
+        ]);
+        $customer = CustomerMaster::factory()->create([
+            'business_name' => 'Operational Customer',
+            'sales_region' => 'SHOW-REG',
+            'phone_number' => '7087973183',
+        ]);
+        $companyPlan = CustomerFjp::create([
+            'company_id' => $this->companyA->company_id,
+            'customer_id' => $customer->customer_id,
+            'preferred_week' => 2,
+            'preferred_day' => 1,
+            'active' => true,
+        ]);
+        CustomerFjp::create([
+            'company_id' => $this->companyB->company_id,
+            'customer_id' => $customer->customer_id,
+            'preferred_week' => 3,
+            'preferred_day' => 5,
+            'active' => true,
+        ]);
+
+        $this->actingAs($admin)->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Operational Customer')
+            ->assertSee('Lagos Mainland')
+            ->assertDontSee('SHOW-REG')
+            ->assertSee('W2-Mon')
+            ->assertDontSee('W3-Fri')
+            ->assertSee(route('fjp.edit', $companyPlan), false);
+    }
+
+    public function test_sales_employee_cannot_open_admin_customer_details(): void
+    {
+        $seller = AppUser::factory()->salesEmployee()->create([
+            'employee_id' => $this->employeeA->employee_id,
+            'company_id' => $this->companyA->company_id,
+        ]);
+        $customer = CustomerMaster::factory()->forEmployee($this->employeeA)->create();
+
+        $this->actingAs($seller)->get(route('customers.show', $customer))->assertForbidden();
+    }
+
+    public function test_customer_index_contains_upload_and_customer_selection_controls(): void
+    {
+        $admin = $this->adminFor($this->companyA);
+        $customer = CustomerMaster::factory()->create(['business_name' => 'Selectable Customer']);
+
+        $this->actingAs($admin)->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Upload company preferred visits')
+            ->assertSee('Select all')
+            ->assertSee('Clear FJP')
+            ->assertSee('name="customer_ids[]"', false)
+            ->assertSee((string) $customer->customer_id);
     }
 
     public function test_sales_employee_cannot_access_master_data_write(): void

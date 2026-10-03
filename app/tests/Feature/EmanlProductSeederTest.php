@@ -45,13 +45,24 @@ class EmanlProductSeederTest extends TestCase
             'company_id' => 'EMANL',
             'product_description' => 'SEDAP SUPREME RICH SPICES 70GR',
             'product_category' => '1902.3',
-            'product_sku' => '16000013',
+            'product_sku' => '502-512',
             'sku_description' => 'Sedap Supreme Rich Spices',
             'basic_unit' => 'CTN',
             'ext_product_id' => '16000013',
             'issuing_company' => 'EMANL',
             'active' => true,
         ]);
+        $this->assertDatabaseHas('product_master', [
+            'ext_product_id' => '16000014',
+            'product_sku' => '502-504',
+            'sku_description' => 'Sedaap Supreme 70 gr @40p',
+        ]);
+        $this->assertDatabaseHas('product_master', [
+            'ext_product_id' => '16000015',
+            'product_sku' => '502-513',
+            'sku_description' => 'SSRS100 @ 40 pc',
+        ]);
+        $this->assertSame(2, ProductMaster::where('company_id', 'EMANL')->where('product_sku', '502-504')->count());
         $this->assertDatabaseHas('product_unit_conversion', [
             'product_id' => 'EMANL-16000013',
             'alternative_unit' => 'PCS',
@@ -77,7 +88,7 @@ class EmanlProductSeederTest extends TestCase
         $rows = file(database_path('seeders/data/emanl-products.csv'), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
         return array_map(
-            fn (string $row): string => 'EMANL-'.str_getcsv($row)[5],
+            fn (string $row): string => 'EMANL-'.str_getcsv($row)[6],
             array_slice($rows, 1),
         );
     }

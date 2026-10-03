@@ -1,8 +1,8 @@
 <x-app-layout>
     <x-slot name="header">
         <div>
-            <h1>Invoices</h1>
-            <p class="text-sm text-on-surface-variant">Generated from POD-confirmed quantities — one final invoice per order</p>
+            <h1>{{ $outstandingOnly ? 'Pending settlements' : 'Invoices' }}</h1>
+            <p class="text-sm text-on-surface-variant">{{ $outstandingOnly ? 'Unpaid invoices for your assigned customers' : 'Generated from POD-confirmed quantities — one final invoice per order' }}</p>
         </div>
     </x-slot>
 
@@ -30,7 +30,7 @@
             </a>
         @empty
             <div class="m-card p-6 text-center text-sm text-on-surface-variant">
-                No invoices yet. An invoice is generated automatically when an order's deliveries are fully POD-confirmed.
+                {{ $outstandingOnly ? 'No pending settlements.' : "No invoices yet. An invoice is generated automatically when an order's deliveries are fully POD-confirmed." }}
             </div>
         @endforelse
     </div>

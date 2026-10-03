@@ -172,7 +172,8 @@ class PublicInvoiceEvidenceTest extends TestCase
         $page->assertSee('NGN 10,000.00');
         $page->assertSee('TRX-99887766');
         $page->assertSee('Proof of Payment');
-        $page->assertSee('View receipt / evidence');
+        $page->assertSee('Open proof of payment');
+        $page->assertSee('alt="Proof of payment"', false);
         $page->assertSee(route('invoice.public.evidence', [
             'token' => $token, 'payment' => $payment->payment_id, 'evidence' => $evidence->evidence_id,
         ]));
@@ -192,6 +193,7 @@ class PublicInvoiceEvidenceTest extends TestCase
         $this->assertStringContainsString('no-store', $cacheControl, 'Public evidence is never cached.');
         $this->assertStringContainsString('private', $cacheControl);
         $this->assertStringContainsString('payment-evidence.jpg', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('inline', (string) $response->headers->get('Content-Disposition'));
         $this->assertNotEmpty($response->streamedContent(), 'The receipt image bytes are served.');
 
         // Read-only by construction: no ERP write verb is reachable on these routes.

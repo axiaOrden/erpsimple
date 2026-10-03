@@ -4,11 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\AppUser;
 use App\Models\CompanyMaster;
-use App\Models\CustomerEmployee;
-use App\Models\CustomerFjp;
-use App\Models\CustomerMaster;
 use App\Models\EmployeeMaster;
-use App\Models\ProductMaster;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -91,84 +87,12 @@ class DatabaseSeeder extends Seeder
             'role' => 'SUPERADMIN',
         ]);
 
-        $this->seedDemoFieldData();
-        $this->seedDemoFjp();
-        $this->seedDemoProducts();
-        $this->call(EmanlProductSeeder::class);
-    }
-
-    /** Demo products for each company so the product list has content. */
-    private function seedDemoProducts(): void
-    {
-        $products = [
-            ['company_id' => 'EMANL', 'product_id' => 'EM-PASTA-500', 'product_description' => 'Pasta 500g', 'product_sku' => 'EM-PAS-500', 'product_category' => 'Food', 'basic_unit' => 'PCS'],
-            ['company_id' => 'EMANL', 'product_id' => 'EM-OIL-1L', 'product_description' => 'Vegetable Oil 1L', 'product_sku' => 'EM-OIL-1L', 'product_category' => 'Food', 'basic_unit' => 'PCS'],
-            ['company_id' => 'PB', 'product_id' => 'PB-BISC-CTN', 'product_description' => 'Biscuits Carton', 'product_sku' => 'PB-BIS-CTN', 'product_category' => 'Food', 'basic_unit' => 'CTN'],
-            ['company_id' => 'NB', 'product_id' => 'NB-SOAP-CTN', 'product_description' => 'Soap Carton', 'product_sku' => 'NB-SOA-CTN', 'product_category' => 'Home Care', 'basic_unit' => 'CTN'],
-            ['company_id' => 'PF', 'product_id' => 'PF-RICE-50KG', 'product_description' => 'Rice 50kg Bag', 'product_sku' => 'PF-RIC-50', 'product_category' => 'Food', 'basic_unit' => 'KG'],
-        ];
-
-        foreach ($products as $p) {
-            ProductMaster::updateOrCreate(
-                ['product_id' => $p['product_id']],
-                $p + ['active' => true],
-            );
-        }
-    }
-
-    /**
-     * Demo customers + assignments + journey plan for the sales employee,
-     * so the field dashboard has real content on first run.
-     */
-    private function seedDemoFieldData(): void
-    {
-        if (CustomerMaster::count() > 0) {
-            return;
-        }
-
-        $customers = [
-            ['customer_id' => 'MIMZA', 'business_name' => 'Mimza Distribution', 'customer_type' => 'PRIMARY', 'city' => 'Lagos', 'sales_region' => 'SW'],
-            ['customer_id' => 'ABC', 'business_name' => 'ABC Traders', 'customer_type' => 'PRIMARY', 'city' => 'Lagos', 'sales_region' => 'SW'],
-            ['customer_id' => 'MAMA-CHI', 'business_name' => 'Mama Chi Stores', 'customer_type' => 'SECONDARY', 'city' => 'Lagos', 'sales_region' => 'SW'],
-            ['customer_id' => 'VAN-01', 'business_name' => 'Van 01 (Lagos)', 'customer_type' => 'VAN', 'city' => 'Lagos', 'sales_region' => 'SW'],
-        ];
-
-        foreach ($customers as $c) {
-            CustomerMaster::updateOrCreate(
-                ['customer_id' => $c['customer_id']],
-                $c + ['active' => true],
-            );
-
-            CustomerEmployee::updateOrCreate(
-                [
-                    'customer_id' => $c['customer_id'],
-                    'employee_id' => 'EMP-SE-001',
-                    'role' => 'SE',
-                ],
-                [],
-            );
-        }
-
-    }
-
-    /** FJP demo: every weekday across all four rotation weeks. */
-    private function seedDemoFjp(): void
-    {
-        // Numeric weekday indexes (0 = Sunday … 6 = Saturday): Monday–Friday.
-        foreach ([1, 2, 3, 4, 5] as $day) {
-            foreach ([1, 2, 3, 4] as $week) {
-                CustomerFjp::updateOrCreate(
-                    [
-                        'company_id' => 'EMANL',
-                        'employee_id' => 'EMP-SE-001',
-                        'customer_id' => 'MAMA-CHI',
-                        'preferred_week' => $week,
-                        'preferred_day' => $day,
-                    ],
-                    ['active' => true],
-                );
-            }
-        }
+        $this->call([
+            SalesRegionSeeder::class,
+            EmanlEmployeeSeeder::class,
+            EmanlProductSeeder::class,
+            LagosCustomerSeeder::class,
+        ]);
     }
 
     private function upsertUser(array $attributes): void

@@ -12,6 +12,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 class CustomerMasterPolicy extends MasterDataPolicy
 {
+    public function view(AppUser $user, Model $model): bool
+    {
+        return $user->isSuperadmin() || $user->isCompanyAdmin();
+    }
+
     public function create(AppUser $user): bool
     {
         return $user->isSuperadmin();

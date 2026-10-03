@@ -16,9 +16,8 @@ use Tests\TestCase;
 /**
  * Fixed Journey Plan isolation and storage contract (UAT correction pass).
  *
- *  - A customer can carry FJP rows for SEVERAL companies/employees. A field
- *    employee may only ever see the rows that belong to their own employee
- *    record, their own company, that customer and are ACTIVE.
+ *  - A customer can carry FJP rows for several companies. A field employee
+ *    sees their company's rows only when that customer is assigned to them.
  *  - `preferred_day` is stored as a compact numeric weekday index
  *    (0 = Sunday … 6 = Saturday). `preferred_week` stays the numeric rotation
  *    position. No combined `W1-Mon` string is ever persisted.
@@ -202,12 +201,12 @@ class FjpIsolationTest extends TestCase
         $this->assertCount(0, $visits);
     }
 
-    public function test_another_employees_schedule_in_the_same_company_is_not_mine(): void
+    public function test_company_schedule_is_shared_with_assigned_colleagues(): void
     {
         $colleague = EmployeeMaster::factory()->create(['company_id' => $this->companyA->company_id]);
+        $this->shared->employees()->attach($colleague->employee_id, ['role' => 'SE']);
 
-        $this->planFor($colleague, $this->companyA);
-        $this->planFor($this->employeeA, $this->companyA);
+        $plan = $this->planFor($colleague, $this->companyA);
 
         $visits = collect(
             $this->actingAs($this->sellerA)
@@ -216,8 +215,8 @@ class FjpIsolationTest extends TestCase
                 ->viewData('visits'),
         );
 
-        $this->assertCount(1, $visits, 'Only my own plan row may appear.');
-        $this->assertSame($this->employeeA->employee_id, $visits->first()['plan']->employee_id);
+        $this->assertCount(1, $visits);
+        $this->assertSame($plan->fjp_id, $visits->first()['plan']->fjp_id);
     }
 
     public function test_preferred_visits_for_a_customer_are_weekday_ordered_and_company_scoped(): void

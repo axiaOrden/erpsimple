@@ -9,6 +9,7 @@ use App\Models\EmployeeProduct;
 use App\Models\ProductMaster;
 use App\Services\CompanyContext;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Manages the two assignment relations for one employee:
@@ -27,6 +28,11 @@ class AssignmentController extends Controller
             ->pluck('customer_id');
 
         $customers = CustomerMaster::where('active', true)
+            ->when(
+                $employee->region_code === null || $employee->region_code === '',
+                fn ($query) => $query->whereRaw('1 = 0'),
+                fn ($query) => $query->where('sales_region', $employee->region_code),
+            )
             ->orderBy('business_name')
             ->get()
             ->map(fn (CustomerMaster $c) => [
@@ -60,21 +66,37 @@ class AssignmentController extends Controller
 
         $validated = $request->validate([
             'customer_ids' => ['nullable', 'array'],
-            'customer_ids.*' => ['string', 'exists:customer_master,customer_id'],
+            'customer_ids.*' => [
+                'integer',
+                Rule::exists('customer_master', 'customer_id')
+                    ->where('active', true)
+                    ->where(function ($query) use ($employee) {
+                        if ($employee->region_code === null || $employee->region_code === '') {
+                            $query->whereRaw('1 = 0');
+
+                            return;
+                        }
+
+                        $query->where('sales_region', $employee->region_code);
+                    }),
+            ],
             'product_scope_mode' => ['required', 'in:ALL,SELECTED'],
             'product_ids' => ['nullable', 'array', 'required_if:product_scope_mode,SELECTED'],
             'product_ids.*' => ['string', 'exists:product_master,product_id'],
         ]);
 
-        // --- customer assignments (global customer list; role SE) ---
+        // --- customer assignments (employee placement region; role SE) ---
         $selectedCustomers = collect($validated['customer_ids'] ?? []);
 
-        // Only customers belonging to the employee's company may be assigned.
-        $validCustomers = $selectedCustomers->filter(function ($customerId) {
-            // Customers are global; any active customer may be assigned. Keep
-            // validation strict anyway: must exist and be active.
-            return CustomerMaster::where('customer_id', $customerId)->where('active', true)->exists();
-        });
+        $validCustomers = CustomerMaster::query()
+            ->whereIn('customer_id', $selectedCustomers)
+            ->where('active', true)
+            ->when(
+                $employee->region_code === null || $employee->region_code === '',
+                fn ($query) => $query->whereRaw('1 = 0'),
+                fn ($query) => $query->where('sales_region', $employee->region_code),
+            )
+            ->pluck('customer_id');
 
         CustomerEmployee::where('employee_id', $employee->employee_id)
             ->whereNotIn('customer_id', $validCustomers->values())

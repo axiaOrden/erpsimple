@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EmployeeMaster extends Model
 {
@@ -21,6 +23,9 @@ class EmployeeMaster extends Model
         'employee_id',
         'company_id',
         'employee_name',
+        'region_code',
+        'partner_function',
+        'partner_id',
         'email_address',
         'phone_number',
         'active',
@@ -34,6 +39,21 @@ class EmployeeMaster extends Model
     public function company()
     {
         return $this->belongsTo(CompanyMaster::class, 'company_id', 'company_id');
+    }
+
+    public function region(): BelongsTo
+    {
+        return $this->belongsTo(SalesRegion::class, 'region_code', 'region_code');
+    }
+
+    public function partner(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'partner_id', 'employee_id');
+    }
+
+    public function directReports(): HasMany
+    {
+        return $this->hasMany(self::class, 'partner_id', 'employee_id');
     }
 
     public function user()

@@ -98,13 +98,16 @@ class SalesEmployeeWorkflowTest extends TestCase
         $this->actingAs($this->seller)
             ->get(route('inventory.counts.create', [
                 'customer' => $this->secondary->customer_id,
-                'type' => 'SECONDARY_OBSERVATION',
+                'type' => 'PRIMARY_OPERATIONAL', // crafted mismatch is ignored
             ]))
             ->assertSee($this->secondary->business_name)
             ->assertSee($allowed->product_description)
             ->assertDontSee($blocked->product_description)
             ->assertDontSee($foreign->product_description)
-            ->assertSee('value="SECONDARY_OBSERVATION" selected', false);
+            ->assertSee('type="hidden" name="count_type" value="SECONDARY_OBSERVATION"', false)
+            ->assertDontSee('type="hidden" name="count_type" value="PRIMARY_OPERATIONAL"', false)
+            ->assertDontSee('Choose customer…')
+            ->assertDontSee('<select id="count_type"', false);
     }
 
     public function test_contextual_order_and_shipment_forms_preselect_the_customer(): void

@@ -138,7 +138,7 @@ class FinanceTest extends TestCase
                 'qty' => $qty,
                 'unit' => $unit,
                 'unit_price' => $price,
-                'price_override_reason' => $price !== null ? 'Negotiated snapshot price' : null,
+                'price_override_reason' => $price !== null ? 'SPECIAL_PRICE' : null,
             ]]),
         )['order'];
 
@@ -187,7 +187,7 @@ class FinanceTest extends TestCase
                 'qty' => $qty,
                 'unit' => $unit,
                 'unit_price' => $price,
-                'price_override_reason' => $price !== null ? 'Negotiated snapshot price' : null,
+                'price_override_reason' => $price !== null ? 'SPECIAL_PRICE' : null,
             ]]),
         )['order'];
 
@@ -343,7 +343,7 @@ class FinanceTest extends TestCase
                 'qty' => '10',
                 'unit' => 'CTN',
                 'unit_price' => '24500.00',
-                'price_override_reason' => 'Deal: buy 10 get 1',
+                'price_override_reason' => 'SPECIAL_PRICE',
             ]]),
         )['order'];
         $this->orders->confirm($order);
