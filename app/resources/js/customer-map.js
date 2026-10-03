@@ -91,6 +91,7 @@ export function customerRegistration(config = {}) {
 
         map: null,
         marker: null,
+        mapReady: false,
 
         init() {
             if (this.mode !== 'capture') {
@@ -186,19 +187,21 @@ export function customerRegistration(config = {}) {
 
             this.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
+            await this.map.once('load');
+            this.mapReady = true;
+
             if (this.hasCoordinates()) this.placeMarker(false);
         },
 
         placeMarker(fly = false) {
-            // The library may still be loading; buildMap() places the marker
-            // as soon as it is ready.
-            if (this.map === null || maplibreModule === null || !this.hasCoordinates()) return;
+            // buildMap() adds the marker after MapLibre has painted the map.
+            if (!this.mapReady || this.map === null || maplibreModule === null || !this.hasCoordinates()) return;
 
             const maplibregl = maplibreModule;
             const position = [this.lng, this.lat];
 
             if (this.marker === null) {
-                this.marker = new maplibregl.Marker({ color: '#0b57d0', draggable: false }).setLngLat(position).addTo(this.map);
+                this.marker = new maplibregl.Marker({ color: '#006a64', draggable: false }).setLngLat(position).addTo(this.map);
             } else {
                 this.marker.setLngLat(position);
             }

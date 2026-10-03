@@ -37,12 +37,12 @@
     @endphp
 
     @if ($variant === 'sidebar')
-        <p class="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Field sales</p>
+        <p class="px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#93b9b2]">Field sales</p>
 
         @foreach ($primaryItems as $item)
             <a href="{{ route($item['route']) }}"
-               class="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium
-                      {{ request()->routeIs($item['match']) ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container-high' }}">
+               class="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition-colors
+                      {{ request()->routeIs($item['match']) ? 'bg-primary-container text-on-primary-container shadow-m1' : 'text-[#c5dcd7] hover:bg-white/10 hover:text-white' }}">
                 <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/>
                 </svg>
@@ -50,21 +50,21 @@
             </a>
         @endforeach
 
-        <p class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">More</p>
+        <p class="px-3 pb-2 pt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#93b9b2]">More</p>
 
         @foreach ($moreItems as $item)
             <a href="{{ route($item['route']) }}"
-               class="flex items-center gap-3 rounded-full px-4 py-2.5 text-sm
-                      {{ request()->routeIs($item['match']) ? 'bg-secondary-container text-on-secondary-container font-medium' : 'text-on-surface-variant hover:bg-surface-container-high' }}">
+               class="flex items-center gap-3 rounded-full px-4 py-2.5 text-sm transition-colors
+                      {{ request()->routeIs($item['match']) ? 'bg-primary-container text-on-primary-container font-semibold' : 'text-[#c5dcd7] hover:bg-white/10 hover:text-white' }}">
                 {{ $item['label'] }}
             </a>
         @endforeach
     @else
         @foreach ($primaryItems as $item)
             <a href="{{ route($item['route']) }}"
-               class="flex flex-col items-center justify-center gap-0.5 pb-1 pt-2 text-[11px] font-medium
-                      {{ request()->routeIs($item['match']) ? 'text-on-surface' : 'text-on-surface-variant' }}">
-                <span class="grid h-8 w-16 place-items-center rounded-full {{ request()->routeIs($item['match']) ? 'bg-secondary-container' : '' }}">
+               class="flex flex-col items-center justify-center gap-0.5 pb-1 pt-2 text-[11px] font-semibold
+                      {{ request()->routeIs($item['match']) ? 'text-white' : 'text-[#c5dcd7]' }}">
+                <span class="grid h-8 w-16 place-items-center rounded-full transition-colors {{ request()->routeIs($item['match']) ? 'bg-primary-container text-on-primary-container' : '' }}">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/>
                     </svg>
@@ -91,11 +91,11 @@
     @endphp
 
     @if ($variant === 'sidebar')
-        <p class="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Administration</p>
+        <p class="px-3 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#93b9b2]">Administration</p>
         @foreach ($items as $item)
             <a href="{{ route($item['route']) }}"
-               class="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-medium
-                      {{ request()->routeIs($item['match']) ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container-high' }}">
+               class="flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold transition-colors
+                      {{ request()->routeIs($item['match']) ? 'bg-primary-container text-on-primary-container shadow-m1' : 'text-[#c5dcd7] hover:bg-white/10 hover:text-white' }}">
                 <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/>
                 </svg>
@@ -105,9 +105,9 @@
     @else
         @foreach (array_slice($items, 0, 5) as $item)
             <a href="{{ route($item['route']) }}"
-               class="flex flex-col items-center justify-center gap-0.5 pb-1 pt-2 text-[11px] font-medium
-                      {{ request()->routeIs($item['match']) ? 'text-on-surface' : 'text-on-surface-variant' }}">
-                <span class="grid h-8 w-16 place-items-center rounded-full {{ request()->routeIs($item['match']) ? 'bg-secondary-container' : '' }}">
+               class="flex flex-col items-center justify-center gap-0.5 pb-1 pt-2 text-[11px] font-semibold
+                      {{ request()->routeIs($item['match']) ? 'text-white' : 'text-[#c5dcd7]' }}">
+                <span class="grid h-8 w-16 place-items-center rounded-full transition-colors {{ request()->routeIs($item['match']) ? 'bg-primary-container text-on-primary-container' : '' }}">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}"/>
                     </svg>

@@ -5,10 +5,18 @@
 @layer base {
     html {
         -webkit-tap-highlight-color: transparent;
+        color-scheme: light;
+        scroll-behavior: smooth;
     }
 
     body {
         @apply bg-surface text-on-surface antialiased;
+        min-height: 100dvh;
+        background-image:
+            radial-gradient(circle at 5% -10%, rgba(0, 106, 100, .16), transparent 34rem),
+            radial-gradient(circle at 100% 20%, rgba(82, 163, 154, .12), transparent 30rem),
+            linear-gradient(145deg, #e4f1ed 0%, #edf7f4 52%, #dcece7 100%);
+        background-attachment: fixed;
     }
 
     /*
@@ -26,6 +34,7 @@
     button,
     a {
         touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 
     /* 44px minimum touch targets (not for checkbox/radio controls) */
@@ -44,35 +53,102 @@
     }
 
     h1 {
-        @apply text-2xl font-semibold tracking-tight;
+        @apply text-2xl font-bold tracking-[-0.035em] md:text-3xl;
     }
 
     h2 {
-        @apply text-xl font-semibold tracking-tight;
+        @apply text-xl font-bold tracking-[-0.025em];
     }
 
     h3 {
-        @apply text-lg font-medium;
+        @apply text-lg font-semibold tracking-tight;
+    }
+
+    :focus-visible {
+        outline: 3px solid rgba(0, 106, 100, .38);
+        outline-offset: 3px;
+    }
+
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+        @apply rounded-m border-outline-variant bg-surface-container-low text-on-surface shadow-none transition duration-200;
+    }
+
+    input:not([type="checkbox"]):not([type="radio"]):hover,
+    select:hover,
+    textarea:hover {
+        @apply border-outline bg-surface-container;
+    }
+
+    input:not([type="checkbox"]):not([type="radio"]):focus,
+    select:focus,
+    textarea:focus {
+        @apply border-primary bg-surface-container-low ring-2 ring-primary/20;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        @apply text-on-surface-variant/70;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+        @apply border-outline bg-surface-container-low text-primary focus:ring-primary/30 focus:ring-offset-surface;
+    }
+
+    button,
+    [role="button"] {
+        @apply transition duration-200 ease-out;
+    }
+
+    button:active:not(:disabled),
+    [role="button"]:active {
+        transform: scale(.98);
+    }
+
+    table {
+        @apply overflow-hidden rounded-m;
+    }
+
+    thead {
+        @apply bg-surface-container-high text-on-surface-variant;
+    }
+
+    tbody tr {
+        @apply border-outline-variant transition-colors hover:bg-primary/5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .01ms !important;
+        }
     }
 }
 
 @layer components {
-    /* Material filled card: rounded, elevated surface */
     .m-card {
-        @apply bg-surface-container rounded-m shadow-m1;
+        @apply rounded-ml border border-white/50 bg-surface-container/95 shadow-m1 backdrop-blur-sm;
     }
 
-    /* Outlined card variant */
     .m-card-outlined {
-        @apply bg-surface border border-outline-variant rounded-m;
+        @apply rounded-ml border border-outline-variant bg-surface-container-low/80;
     }
 
     .m-chip {
-        @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-surface-variant text-on-surface-variant;
+        @apply inline-flex min-h-8 items-center gap-1.5 rounded-full border border-transparent bg-surface-variant px-3 py-1 text-xs font-semibold text-on-surface-variant transition-colors;
     }
 
     .m-chip-active {
-        @apply bg-primary-container text-on-primary-container;
+        @apply border-primary/10 bg-primary-container text-on-primary-container;
     }
 
     .m-chip-error {
@@ -80,10 +156,30 @@
     }
 
     .m-fab {
-        @apply fixed bottom-24 right-4 md:hidden inline-flex items-center justify-center w-14 h-14 rounded-ml bg-primary-container text-on-primary-container shadow-m2 active:scale-95 transition-transform;
+        @apply fixed bottom-24 right-4 inline-flex h-14 w-14 items-center justify-center rounded-[1.35rem] bg-primary text-on-primary shadow-m2 transition-transform active:scale-95 md:hidden;
     }
 
     .m-list-item {
-        @apply flex items-center gap-3 px-4 py-3 min-h-[56px] active:bg-surface-container-high transition-colors;
+        @apply flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors hover:bg-primary/5 active:bg-primary/10;
+    }
+
+    .m-icon-button {
+        @apply grid h-11 w-11 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-primary/10 hover:text-primary;
+    }
+
+    .m-button-filled {
+        @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-on-primary shadow-m1 hover:shadow-m2 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .m-button-tonal {
+        @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-secondary-container px-5 text-sm font-bold text-on-secondary-container hover:bg-primary-container;
+    }
+
+    .m-button-outlined {
+        @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-outline px-5 text-sm font-bold text-primary hover:bg-primary/10;
+    }
+
+    .m-page-header {
+        @apply rounded-ml border border-white/40 bg-surface-container/70 px-4 py-4 shadow-m1 backdrop-blur-md md:px-6;
     }
 }
