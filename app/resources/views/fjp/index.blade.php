@@ -73,24 +73,33 @@
             @method('delete')
 
             <div class="mb-2 flex items-center justify-between gap-3">
-                <label class="inline-flex items-center gap-2 text-sm font-medium">
-                    <input type="checkbox" class="rounded border-outline text-primary focus:ring-primary"
-                           @change="selected = $event.target.checked ? {{ Js::from($plans->pluck('fjp_id')->map(fn ($id) => (string) $id)->values()) }} : []"
-                           :checked="selected.length === {{ $plans->count() }}">
-                    Select all on this page
-                </label>
+                <button type="button" class="m-button-tonal px-4"
+                        :class="selected.length === {{ $plans->count() }} ? 'bg-primary-container text-on-primary-container' : ''"
+                        @click="selected = selected.length === {{ $plans->count() }} ? [] : {{ Js::from($plans->pluck('fjp_id')->map(fn ($id) => (string) $id)->values()) }}">
+                    <span x-text="selected.length === {{ $plans->count() }} ? 'Clear selection' : 'Select all on this page'"></span>
+                </button>
                 <button type="submit" :disabled="selected.length === 0"
                         class="inline-flex h-10 items-center rounded-full bg-error-container px-4 text-sm font-semibold text-on-error-container disabled:cursor-not-allowed disabled:opacity-50">
                     Clear selected
                 </button>
             </div>
 
-            <div class="m-card divide-y divide-outline-variant">
+            <div class="space-y-2">
                 @foreach ($plans as $plan)
-                    <div class="m-list-item">
-                        <input type="checkbox" name="fjp_ids[]" value="{{ $plan->fjp_id }}" x-model="selected"
-                               aria-label="Select {{ $plan->customer->business_name }} {{ $plan->visitLabel() }}"
-                               class="rounded border-outline text-primary focus:ring-primary">
+                    <div class="m-list-item cursor-pointer rounded-m border transition-colors"
+                         :class="selected.includes('{{ $plan->fjp_id }}') ? 'border-primary bg-primary-container shadow-m1' : 'border-outline-variant bg-surface-container/80'"
+                         @click="selected.includes('{{ $plan->fjp_id }}') ? selected = selected.filter(id => id !== '{{ $plan->fjp_id }}') : selected.push('{{ $plan->fjp_id }}')">
+                        <label class="grid h-11 w-11 shrink-0 cursor-pointer place-items-center" @click.stop>
+                            <input type="checkbox" name="fjp_ids[]" value="{{ $plan->fjp_id }}" x-model="selected"
+                                   aria-label="Select {{ $plan->customer->business_name }} {{ $plan->visitLabel() }}" class="sr-only">
+                            <span class="grid h-7 w-7 place-items-center rounded-full border-2 transition-colors"
+                                  :class="selected.includes('{{ $plan->fjp_id }}') ? 'border-primary bg-primary text-on-primary' : 'border-outline bg-transparent text-transparent'"
+                                  aria-hidden="true">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </span>
+                        </label>
                     <div class="min-w-0 flex-1">
                         <p class="font-medium truncate">
                             {{ $plan->customer->business_name }}
@@ -105,7 +114,7 @@
                     </span>
                     @can('update', $plan)
                         <a href="{{ route('fjp.edit', $plan) }}"
-                           class="h-10 px-4 inline-flex items-center rounded-full bg-primary-container text-on-primary-container text-sm font-medium shrink-0">
+                           class="h-10 px-4 inline-flex items-center rounded-full bg-primary-container text-on-primary-container text-sm font-medium shrink-0" @click.stop>
                             Edit
                         </a>
                     @endcan

@@ -45,13 +45,32 @@ return new class extends Migration
             });
         }
 
-        Schema::table('customer_fjp', function (Blueprint $table) {
-            $table->dropIndex('idx_fjp_plan');
-            $table->dropIndex('idx_fjp_employee');
-            $table->dropColumn('employee_id');
+        if ($this->indexExists('customer_fjp', 'idx_fjp_plan')) {
+            Schema::table('customer_fjp', function (Blueprint $table) {
+                $table->dropIndex('idx_fjp_plan');
+            });
+        }
 
-            $table->index(['company_id', 'preferred_day', 'preferred_week'], 'idx_fjp_plan');
-        });
+        if ($this->indexExists('customer_fjp', 'idx_fjp_employee')) {
+            Schema::table('customer_fjp', function (Blueprint $table) {
+                $table->dropIndex('idx_fjp_employee');
+            });
+        }
+
+        if (Schema::hasColumn('customer_fjp', 'employee_id')) {
+            Schema::table('customer_fjp', function (Blueprint $table) {
+                $table->dropColumn('employee_id');
+            });
+        }
+
+        if (! $this->indexExists('customer_fjp', 'idx_fjp_plan')) {
+            Schema::table('customer_fjp', function (Blueprint $table) {
+                $table->index(
+                    ['company_id', 'preferred_day', 'preferred_week'],
+                    'idx_fjp_plan'
+                );
+            });
+        }
     }
 
     /**
